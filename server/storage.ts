@@ -5,6 +5,36 @@ import type { Recipe, InsertRecipe, WeeklyPlan, InsertWeeklyPlan, PantryStaple, 
 import { eq } from "drizzle-orm";
 
 const sqlite = new Database("data.db");
+
+// Auto-create tables if they don't exist (essential for fresh deployments)
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS recipes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    cuisine TEXT NOT NULL,
+    meal_type TEXT NOT NULL,
+    difficulty TEXT NOT NULL,
+    prep_time INTEGER,
+    cook_time INTEGER,
+    servings INTEGER NOT NULL DEFAULT 3,
+    ingredients TEXT NOT NULL,
+    instructions TEXT,
+    tags TEXT,
+    is_favorite INTEGER DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS weekly_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    week_start TEXT NOT NULL,
+    meals TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS pantry_staples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL
+  );
+`);
+
 const db = drizzle(sqlite);
 
 export interface IStorage {
