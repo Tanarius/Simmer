@@ -81,6 +81,25 @@ function parseIngredientString(raw: string): { name: string; amount: number; uni
   return { name: raw.trim(), amount: 1, unit: "whole" };
 }
 
+/**
+ * Decode common HTML entities in text.
+ */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x2F;/g, "/")
+    .replace(/&#\d+;/g, (match) => {
+      const code = parseInt(match.replace(/&#|;/g, ""), 10);
+      return String.fromCharCode(code);
+    });
+}
+
 export async function registerRoutes(server: Server, app: Express) {
   // Seed default data on first run
   storage.seedDefaultData();
@@ -164,64 +183,134 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === RECIPE IMPORT FROM URL ===
+
+  /**
+   * Attempt to fetch a URL's HTML using multiple strategies.
+   * Some recipe sites (AllRecipes, Dotdash Meredith) block server-side requests.
+   */
+  async function fetchHtml(url: string): Promise<string> {
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "identity",
+      "Cache-Control": "no-cache",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1",
+    };
+
+    // Strategy 1: Direct fetch
+    try {
+      const res = await fetch(url, {
+        headers,
+        redirect: "follow",
+        signal: AbortSignal.timeout(12000),
+      });
+      if (res.ok) {
+        const html = await res.text();
+        // Verify we got actual HTML and not an error page
+        if (html.includes("application/ld+json") || html.includes("recipeIngredient") || html.length > 5000) {
+          return html;
+        }
+      }
+    } catch {
+      // Direct fetch failed, try proxies
+    }
+
+    // Strategy 2: Google cache
+    try {
+      const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`;
+      const res = await fetch(cacheUrl, {
+        headers: { ...headers, "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const html = await res.text();
+        if (html.includes("application/ld+json") || html.includes("recipeIngredient")) {
+          return html;
+        }
+      }
+    } catch {
+      // Google cache failed too
+    }
+
+    // Strategy 3: Try corsproxy.io
+    try {
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+      const res = await fetch(proxyUrl, {
+        headers: { "User-Agent": headers["User-Agent"] },
+        redirect: "follow",
+        signal: AbortSignal.timeout(12000),
+      });
+      if (res.ok) {
+        const html = await res.text();
+        if (html.includes("application/ld+json") || html.includes("recipeIngredient") || html.length > 5000) {
+          return html;
+        }
+      }
+    } catch {
+      // Proxy also failed
+    }
+
+    throw new Error("Could not reach this recipe site. The site may be blocking automated requests. Try copying the recipe details manually.");
+  }
+
+  /**
+   * Extract JSON-LD Recipe data from HTML.
+   */
+  function extractRecipeJsonLd(html: string): any {
+    const jsonLdMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>(.*?)<\/script>/gis);
+    if (!jsonLdMatches) return null;
+
+    for (const block of jsonLdMatches) {
+      try {
+        const jsonStr = block.replace(/<script[^>]*>/i, "").replace(/<\/script>/i, "").trim();
+        let parsed = JSON.parse(jsonStr);
+
+        // Handle @graph arrays
+        if (parsed["@graph"]) {
+          const found = parsed["@graph"].find((item: any) =>
+            item["@type"] === "Recipe" || (Array.isArray(item["@type"]) && item["@type"].includes("Recipe"))
+          );
+          if (found) return found;
+        }
+        // Handle arrays of objects
+        if (Array.isArray(parsed)) {
+          const found = parsed.find((item: any) =>
+            item["@type"] === "Recipe" || (Array.isArray(item["@type"]) && item["@type"].includes("Recipe"))
+          );
+          if (found) return found;
+        }
+        // Direct Recipe object
+        if (parsed && (parsed["@type"] === "Recipe" || (Array.isArray(parsed["@type"]) && parsed["@type"].includes("Recipe")))) {
+          return parsed;
+        }
+      } catch {
+        // JSON parse failed, try next block
+      }
+    }
+    return null;
+  }
+
   app.post("/api/recipes/import-url", async (req, res) => {
     const { url } = req.body as { url: string };
     if (!url) return res.status(400).json({ error: "URL is required" });
 
     try {
-      // Fetch the page HTML
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-        redirect: "follow",
-        signal: AbortSignal.timeout(15000),
-      });
-
-      if (!response.ok) {
-        return res.status(400).json({ error: `Could not fetch URL (${response.status})` });
-      }
-
-      const html = await response.text();
-
-      // Strategy 1: Extract JSON-LD structured data (most popular recipe sites use this)
-      const jsonLdMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>(.*?)<\/script>/gis);
-      let recipeData: any = null;
-
-      if (jsonLdMatches) {
-        for (const block of jsonLdMatches) {
-          try {
-            const jsonStr = block.replace(/<script[^>]*>/i, "").replace(/<\/script>/i, "").trim();
-            let parsed = JSON.parse(jsonStr);
-
-            // Handle @graph arrays
-            if (parsed["@graph"]) {
-              parsed = parsed["@graph"].find((item: any) => item["@type"] === "Recipe" || (Array.isArray(item["@type"]) && item["@type"].includes("Recipe")));
-            }
-            // Handle arrays of objects
-            if (Array.isArray(parsed)) {
-              parsed = parsed.find((item: any) => item["@type"] === "Recipe" || (Array.isArray(item["@type"]) && item["@type"].includes("Recipe")));
-            }
-            // Direct Recipe object
-            if (parsed && (parsed["@type"] === "Recipe" || (Array.isArray(parsed["@type"]) && parsed["@type"].includes("Recipe")))) {
-              recipeData = parsed;
-              break;
-            }
-          } catch {
-            // JSON parse failed, try next block
-          }
-        }
-      }
+      const html = await fetchHtml(url);
+      const recipeData = extractRecipeJsonLd(html);
 
       if (!recipeData) {
-        return res.status(400).json({ error: "Could not find recipe data on this page. Try a recipe from AllRecipes, Food Network, Tasty, Budget Bytes, Serious Eats, or similar sites." });
+        return res.status(400).json({ error: "Could not find recipe data on this page. The site may not include structured recipe data." });
       }
 
       // Extract fields from JSON-LD
-      const name = recipeData.name || "Imported Recipe";
-      const description = recipeData.description || "";
+      const name = decodeHtmlEntities((recipeData.name || "Imported Recipe").replace(/<[^>]*>/g, ""));
+      const description = decodeHtmlEntities((recipeData.description || "").replace(/<[^>]*>/g, "")); // strip HTML tags + entities
       const prepTime = parseDuration(recipeData.prepTime);
       const cookTime = parseDuration(recipeData.cookTime) || parseDuration(recipeData.totalTime);
       const servings = parseInt(recipeData.recipeYield?.[0] || recipeData.recipeYield || "3", 10) || 3;
@@ -229,12 +318,13 @@ export async function registerRoutes(server: Server, app: Express) {
       // Parse ingredients
       const rawIngredients: string[] = recipeData.recipeIngredient || [];
       const ingredients = rawIngredients.map((raw: string) => {
-        const parsed = parseIngredientString(raw);
+        const clean = raw.replace(/<[^>]*>/g, "").trim(); // strip HTML
+        const parsed = parseIngredientString(clean);
         return {
           name: parsed.name,
           amount: parsed.amount,
           unit: parsed.unit,
-          category: guessCategory(raw),
+          category: guessCategory(clean),
         };
       });
 
@@ -243,15 +333,15 @@ export async function registerRoutes(server: Server, app: Express) {
       if (recipeData.recipeInstructions) {
         if (Array.isArray(recipeData.recipeInstructions)) {
           instructions = recipeData.recipeInstructions.map((step: any) => {
-            if (typeof step === "string") return step;
-            if (step.text) return step.text;
+            if (typeof step === "string") return step.replace(/<[^>]*>/g, "").trim();
+            if (step.text) return step.text.replace(/<[^>]*>/g, "").trim();
             if (step.itemListElement) {
-              return step.itemListElement.map((sub: any) => sub.text || sub).join(" ");
+              return step.itemListElement.map((sub: any) => (sub.text || String(sub)).replace(/<[^>]*>/g, "").trim()).join(" ");
             }
-            return String(step);
-          });
+            return String(step).replace(/<[^>]*>/g, "").trim();
+          }).filter((s: string) => s.length > 0);
         } else if (typeof recipeData.recipeInstructions === "string") {
-          instructions = recipeData.recipeInstructions.split(/\n+/).filter((s: string) => s.trim());
+          instructions = recipeData.recipeInstructions.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim());
         }
       }
 
@@ -283,7 +373,7 @@ export async function registerRoutes(server: Server, app: Express) {
       if (err.name === "TimeoutError" || err.name === "AbortError") {
         return res.status(408).json({ error: "Request timed out. The site may be slow or blocking requests." });
       }
-      return res.status(500).json({ error: err.message || "Failed to import recipe" });
+      return res.status(400).json({ error: err.message || "Failed to import recipe" });
     }
   });
 

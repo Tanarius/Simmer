@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/format-time";
+import { getFoodEmoji, getCuisineGradient } from "@/lib/food-emoji";
 
 const cuisineColors: Record<string, string> = {
   "tex-mex": "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
@@ -54,6 +55,8 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
 
   const tags = parseTags(recipe.tags);
   const totalTime = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
+  const emoji = getFoodEmoji(recipe.name, recipe.cuisine);
+  const gradient = getCuisineGradient(recipe.cuisine);
 
   const handleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -62,47 +65,60 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
 
   return (
     <Card
-      className="cursor-pointer hover-elevate transition-shadow duration-150 border border-card-border"
+      className="cursor-pointer hover-elevate transition-shadow duration-150 border border-card-border overflow-hidden"
       onClick={onClick}
       data-testid={`card-recipe-${recipe.id}`}
     >
-      <CardContent className="p-4">
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="flex-1 min-w-0">
-            <h3
-              className="text-sm font-semibold leading-snug text-foreground truncate"
-              data-testid={`text-recipe-name-${recipe.id}`}
-            >
-              {recipe.name}
-            </h3>
-            {recipe.description && (
-              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
-                {recipe.description}
-              </p>
+      {/* Visual banner with emoji */}
+      <div className={cn(
+        "relative h-24 bg-gradient-to-br flex items-center justify-center",
+        gradient
+      )}>
+        <span className="text-5xl drop-shadow-md select-none" role="img" aria-label={recipe.name}>
+          {emoji}
+        </span>
+        {/* Favorite button overlay */}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="absolute top-1.5 right-1.5 h-8 w-8 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full"
+          onClick={handleFavorite}
+          data-testid={`button-favorite-${recipe.id}`}
+          aria-label={recipe.isFavorite ? "Remove from favorites" : "Add to favorites"}
+        >
+          <Heart
+            className={cn(
+              "h-4 w-4 transition-colors",
+              recipe.isFavorite
+                ? "fill-red-500 text-red-500"
+                : "text-white"
             )}
-          </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="shrink-0 -mt-1 -mr-1"
-            onClick={handleFavorite}
-            data-testid={`button-favorite-${recipe.id}`}
-            aria-label={recipe.isFavorite ? "Remove from favorites" : "Add to favorites"}
-          >
-            <Heart
-              className={cn(
-                "h-4 w-4 transition-colors",
-                recipe.isFavorite
-                  ? "fill-red-500 text-red-500"
-                  : "text-muted-foreground"
-              )}
-            />
-          </Button>
-        </div>
+          />
+        </Button>
+        {/* Crockpot indicator */}
+        {tags.includes("crockpot") && (
+          <span className="absolute top-1.5 left-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full">
+            🥘 Crockpot
+          </span>
+        )}
+      </div>
+
+      <CardContent className="p-3.5">
+        {/* Title */}
+        <h3
+          className="text-sm font-semibold leading-snug text-foreground truncate mb-1"
+          data-testid={`text-recipe-name-${recipe.id}`}
+        >
+          {recipe.name}
+        </h3>
+        {recipe.description && (
+          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-2.5">
+            {recipe.description}
+          </p>
+        )}
 
         {/* Badges row */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
+        <div className="flex flex-wrap gap-1.5 mb-2.5">
           <span
             className={cn(
               "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize",
@@ -137,17 +153,12 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
             <Utensils className="h-3 w-3" />
             {recipe.servings} servings
           </span>
-          {tags.includes("crockpot") && (
-            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
-              🥘 Crockpot
-            </span>
-          )}
         </div>
 
         {/* Tags */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2.5">
-            {tags.map((tag) => (
+        {tags.filter(t => t !== "crockpot").length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {tags.filter(t => t !== "crockpot").map((tag) => (
               <Badge
                 key={tag}
                 variant="secondary"
