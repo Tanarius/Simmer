@@ -16,6 +16,7 @@ export const recipes = sqliteTable("recipes", {
   instructions: text("instructions"), // JSON array of steps
   tags: text("tags"), // JSON array: crockpot, quick, make-ahead, freezer-friendly, etc.
   imageUrl: text("image_url"),
+  sourceUrl: text("source_url"),
   isFavorite: integer("is_favorite").default(0),
 });
 

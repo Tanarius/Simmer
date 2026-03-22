@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2 } from "lucide-react";
+import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2, ExternalLink } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +47,47 @@ function parseIngredients(ingredientsJson: string): Array<{ name: string; amount
 function parseInstructions(instructionsJson: string | null | undefined): string[] {
   if (!instructionsJson) return [];
   try { return JSON.parse(instructionsJson); } catch { return []; }
+}
+
+/** Format a numeric amount into a clean display string (e.g. 0.5 → "1/2", 1.33 → "1 1/3") */
+function formatAmount(amount: number): string {
+  if (amount === 0) return "0";
+  const whole = Math.floor(amount);
+  const frac = amount - whole;
+
+  // Common fraction map (tolerance-based matching)
+  const fractions: [number, string][] = [
+    [0, ""],
+    [0.125, "1/8"],
+    [0.167, "1/6"],
+    [0.2, "1/5"],
+    [0.25, "1/4"],
+    [0.33, "1/3"],
+    [0.375, "3/8"],
+    [0.5, "1/2"],
+    [0.625, "5/8"],
+    [0.667, "2/3"],
+    [0.75, "3/4"],
+    [0.833, "5/6"],
+    [0.875, "7/8"],
+  ];
+
+  // Find closest fraction within tolerance
+  let bestFrac = "";
+  let bestDiff = 0.05; // tolerance
+  for (const [val, str] of fractions) {
+    const diff = Math.abs(frac - val);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestFrac = str;
+    }
+  }
+
+  if (whole > 0 && bestFrac) return `${whole} ${bestFrac}`;
+  if (whole > 0) return `${whole}`;
+  if (bestFrac) return bestFrac;
+  // Fallback: round to 2 decimal places
+  return String(Math.round(amount * 100) / 100);
 }
 
 // ========== VIEW DIALOG ==========
@@ -131,6 +172,20 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
               ))}
             </div>
           )}
+
+          {recipe.sourceUrl && (
+            <a
+              href={recipe.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 mt-2 text-xs text-primary hover:underline"
+              data-testid="link-source-url"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3 w-3" />
+              View Original Recipe
+            </a>
+          )}
         </DialogHeader>
 
         <Separator className="my-1" />
@@ -143,7 +198,7 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
               <li key={i} className="flex items-center gap-2 text-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                 <span className="text-foreground">{ing.name}</span>
-                <span className="text-muted-foreground ml-auto shrink-0">{ing.amount} {ing.unit}</span>
+                <span className="text-muted-foreground ml-auto shrink-0">{formatAmount(ing.amount)} {ing.unit}</span>
               </li>
             ))}
           </ul>
@@ -215,6 +270,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
   ]);
   const [instructions, setInstructions] = useState([""]);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: (data: InsertRecipe) => apiRequest("POST", "/api/recipes", data).then(r => r.json()),
@@ -233,7 +289,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
     setName(""); setDescription(""); setCuisine(""); setMealType("");
     setDifficulty("easy"); setPrepTime(10); setCookTime(30); setServings(3);
     setTags([]); setIngredients([{ name: "", amount: 1, unit: "", category: "produce" }]);
-    setInstructions([""]); setImportUrl(""); setImageUrl(null);
+    setInstructions([""]); setImportUrl(""); setImageUrl(null); setSourceUrl(null);
   }
 
   async function handleImportUrl() {
@@ -257,6 +313,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
       setServings(data.servings || 3);
       setTags(data.tags || []);
       setImageUrl(data.imageUrl || null);
+      setSourceUrl(data.sourceUrl || importUrl.trim());
       if (data.ingredients && data.ingredients.length > 0) {
         setIngredients(data.ingredients.map((i: any) => ({
           name: i.name || "",
@@ -327,6 +384,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
       instructions: JSON.stringify(filteredInstructions),
       tags: JSON.stringify(tags),
       imageUrl,
+      sourceUrl,
       isFavorite: 0,
     });
   }
@@ -528,7 +586,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                     placeholder="Amt"
                     value={ing.amount}
                     min={0}
-                    step={0.25}
+                    step="any"
                     onChange={(e) => updateIngredient(idx, "amount", Number(e.target.value))}
                     data-testid={`input-ingredient-amount-${idx}`}
                   />

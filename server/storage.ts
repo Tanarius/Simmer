@@ -22,6 +22,7 @@ sqlite.exec(`
     instructions TEXT,
     tags TEXT,
     image_url TEXT,
+    source_url TEXT,
     is_favorite INTEGER DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS weekly_plans (
@@ -35,6 +36,13 @@ sqlite.exec(`
     category TEXT NOT NULL
   );
 `);
+
+// Add source_url column if missing (migration for existing databases)
+try {
+  sqlite.exec(`ALTER TABLE recipes ADD COLUMN source_url TEXT`);
+} catch {
+  // Column already exists, ignore
+}
 
 const db = drizzle(sqlite);
 

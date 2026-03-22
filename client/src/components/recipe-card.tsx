@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, Clock, Utensils, ImageOff } from "lucide-react";
+import { Heart, Clock, Utensils, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -166,6 +166,19 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
             <Utensils className="h-3 w-3" />
             {recipe.servings} servings
           </span>
+          {recipe.sourceUrl && (
+            <a
+              href={recipe.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto flex items-center gap-1 text-primary hover:underline"
+              onClick={(e) => e.stopPropagation()}
+              data-testid={`link-source-${recipe.id}`}
+              aria-label="View original recipe"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
         </div>
 
         {/* Tags */}

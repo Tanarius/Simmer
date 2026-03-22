@@ -54,27 +54,39 @@ function guessCuisine(title: string, ingredients: string[]): string {
  * Parse a raw ingredient string like "2 cups all-purpose flour" into structured parts.
  */
 function parseIngredientString(raw: string): { name: string; amount: number; unit: string } {
-  // Clean up common fractions
+  // Clean up common unicode fractions to decimal
   let s = raw.trim()
-    .replace(/½/g, "0.5").replace(/⅓/g, "0.33").replace(/⅔/g, "0.67")
-    .replace(/¼/g, "0.25").replace(/¾/g, "0.75")
-    .replace(/⅛/g, "0.125")
-    .replace(/ {2,}/g, " ");
+    .replace(/½/g, " 1/2").replace(/⅓/g, " 1/3").replace(/⅔/g, " 2/3")
+    .replace(/¼/g, " 1/4").replace(/¾/g, " 3/4")
+    .replace(/⅛/g, " 1/8").replace(/⅜/g, " 3/8").replace(/⅝/g, " 5/8").replace(/⅞/g, " 7/8")
+    .replace(/⅙/g, " 1/6").replace(/⅚/g, " 5/6")
+    .replace(/ {2,}/g, " ")
+    .trim();
 
-  // Try to match: number (possibly with fraction) + optional unit + rest
-  const match = s.match(/^([\d.]+(?:\s*\/\s*[\d.]+)?)\s*(cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|cloves?|cans?|whole|heads?|bunch(?:es)?|packs?|slices?|pieces?|stalks?|bags?)?\s*(.*)$/i);
+  const unitPattern = "(?:cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|cloves?|cans?|whole|heads?|bunch(?:es)?|packs?|slices?|pieces?|stalks?|bags?|quarts?|gallons?|pints?|liters?|ml|grams?|g|kg|dash(?:es)?|pinch(?:es)?|sprigs?|leaves|sticks?)";
 
-  if (match) {
+  // Match: optional whole number + optional fraction + optional unit + rest
+  // Handles: "1 1/2 cups flour", "1/3 cup sugar", "2 tbsp oil", "3 cloves garlic"
+  const match = s.match(new RegExp(
+    `^(\\d+)?\\s*(\\d+\\s*/\\s*\\d+)?\\s*(${unitPattern})?\\s*(.*)$`, "i"
+  ));
+
+  if (match && (match[1] || match[2])) {
     let amount = 0;
-    const amtStr = match[1];
-    if (amtStr.includes("/")) {
-      const [num, den] = amtStr.split("/").map(Number);
-      amount = den ? num / den : num;
-    } else {
-      amount = parseFloat(amtStr) || 0;
+    const wholeStr = match[1];
+    const fracStr = match[2];
+
+    if (wholeStr) amount += parseFloat(wholeStr) || 0;
+    if (fracStr) {
+      const [num, den] = fracStr.split("/").map(s => parseFloat(s.trim()));
+      if (den) amount += num / den;
     }
-    const unit = (match[2] || "whole").toLowerCase().replace(/s$/, "");
-    const name = match[3]?.replace(/^[,\s]+/, "").trim() || raw;
+
+    // Round to 2 decimal places to avoid floating point mess
+    amount = Math.round(amount * 100) / 100;
+
+    const unit = (match[3] || "whole").toLowerCase().replace(/s$/, "");
+    const name = match[4]?.replace(/^[,\s]+/, "").trim() || raw;
     return { name, amount, unit };
   }
 
