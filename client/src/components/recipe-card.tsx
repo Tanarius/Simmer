@@ -1,4 +1,5 @@
-import { Heart, Clock, ChefHat, Utensils } from "lucide-react";
+import { useState } from "react";
+import { Heart, Clock, Utensils, ImageOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,11 +31,7 @@ const difficultyColors: Record<string, string> = {
 
 function parseTags(tagsJson: string | null): string[] {
   if (!tagsJson) return [];
-  try {
-    return JSON.parse(tagsJson);
-  } catch {
-    return [];
-  }
+  try { return JSON.parse(tagsJson); } catch { return []; }
 }
 
 interface RecipeCardProps {
@@ -44,6 +41,7 @@ interface RecipeCardProps {
 
 export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
   const queryClient = useQueryClient();
+  const [imgError, setImgError] = useState(false);
 
   const favoriteMutation = useMutation({
     mutationFn: () =>
@@ -57,6 +55,7 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
   const totalTime = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
   const emoji = getFoodEmoji(recipe.name, recipe.cuisine);
   const gradient = getCuisineGradient(recipe.cuisine);
+  const hasImage = recipe.imageUrl && !imgError;
 
   const handleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -69,19 +68,35 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
       onClick={onClick}
       data-testid={`card-recipe-${recipe.id}`}
     >
-      {/* Visual banner with emoji */}
-      <div className={cn(
-        "relative h-24 bg-gradient-to-br flex items-center justify-center",
-        gradient
-      )}>
-        <span className="text-5xl drop-shadow-md select-none" role="img" aria-label={recipe.name}>
-          {emoji}
-        </span>
+      {/* Visual banner — photo if available, emoji gradient fallback */}
+      <div className="relative h-36 overflow-hidden">
+        {hasImage ? (
+          <img
+            src={recipe.imageUrl!}
+            alt={recipe.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className={cn(
+            "w-full h-full bg-gradient-to-br flex items-center justify-center",
+            gradient
+          )}>
+            <span className="text-5xl drop-shadow-md select-none" role="img" aria-label={recipe.name}>
+              {emoji}
+            </span>
+          </div>
+        )}
+        {/* Dark overlay for text readability on photos */}
+        {hasImage && (
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+        )}
         {/* Favorite button overlay */}
         <Button
           size="icon"
           variant="ghost"
-          className="absolute top-1.5 right-1.5 h-8 w-8 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full"
+          className="absolute top-1.5 right-1.5 h-8 w-8 bg-black/20 hover:bg-black/40 backdrop-blur-sm rounded-full"
           onClick={handleFavorite}
           data-testid={`button-favorite-${recipe.id}`}
           aria-label={recipe.isFavorite ? "Remove from favorites" : "Add to favorites"}
@@ -97,7 +112,7 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
         </Button>
         {/* Crockpot indicator */}
         {tags.includes("crockpot") && (
-          <span className="absolute top-1.5 left-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full">
+          <span className="absolute top-1.5 left-1.5 bg-black/30 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full">
             🥘 Crockpot
           </span>
         )}
@@ -128,9 +143,7 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
           >
             {recipe.cuisine}
           </span>
-          <span
-            className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground"
-          >
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
             {mealTypeLabels[recipe.mealType] ?? recipe.mealType}
           </span>
           <span

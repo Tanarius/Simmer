@@ -21,6 +21,7 @@ sqlite.exec(`
     ingredients TEXT NOT NULL,
     instructions TEXT,
     tags TEXT,
+    image_url TEXT,
     is_favorite INTEGER DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS weekly_plans (
@@ -193,6 +194,7 @@ export class DatabaseStorage implements IStorage {
           "Serve over rice with cheese, sour cream, avocado, lime, and cilantro."
         ]),
         tags: JSON.stringify(["crockpot", "make-ahead", "freezer-friendly"]),
+        imageUrl: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=400&h=300&fit=crop",
         isFavorite: 1,
       },
       {
@@ -225,6 +227,7 @@ export class DatabaseStorage implements IStorage {
           "Serve beef over rice with broccoli, top with sliced green onions."
         ]),
         tags: JSON.stringify(["quick", "make-ahead"]),
+        imageUrl: "https://images.unsplash.com/photo-1590301157890-4810ed352733?w=400&h=300&fit=crop",
         isFavorite: 1,
       },
       {
@@ -255,6 +258,7 @@ export class DatabaseStorage implements IStorage {
           "Garnish with fresh basil."
         ]),
         tags: JSON.stringify(["make-ahead", "freezer-friendly"]),
+        imageUrl: "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -288,6 +292,7 @@ export class DatabaseStorage implements IStorage {
           "Serve with crushed tortilla chips, cheese, avocado, lime, and cilantro."
         ]),
         tags: JSON.stringify(["crockpot", "make-ahead", "freezer-friendly"]),
+        imageUrl: "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -322,6 +327,7 @@ export class DatabaseStorage implements IStorage {
           "Serve over rice, top with sesame seeds and green onions."
         ]),
         tags: JSON.stringify(["quick"]),
+        imageUrl: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -351,6 +357,7 @@ export class DatabaseStorage implements IStorage {
           "Serve on hoagie rolls with provolone."
         ]),
         tags: JSON.stringify(["quick", "one-pan"]),
+        imageUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -381,6 +388,7 @@ export class DatabaseStorage implements IStorage {
           "Top with sour cream, green onions, and cilantro."
         ]),
         tags: JSON.stringify(["make-ahead", "freezer-friendly"]),
+        imageUrl: "https://images.unsplash.com/photo-1534352956036-cd81e27dd615?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -416,6 +424,7 @@ export class DatabaseStorage implements IStorage {
           "Top with soft-boiled eggs, green onions, and a drizzle of sesame oil."
         ]),
         tags: JSON.stringify(["crockpot", "make-ahead"]),
+        imageUrl: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -446,6 +455,7 @@ export class DatabaseStorage implements IStorage {
           "Toss pasta in sauce, top with sliced chicken and parsley."
         ]),
         tags: JSON.stringify(["quick"]),
+        imageUrl: "https://images.unsplash.com/photo-1645112411341-6c4fd023714a?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -480,6 +490,7 @@ export class DatabaseStorage implements IStorage {
           "Serve over rice."
         ]),
         tags: JSON.stringify(["quick"]),
+        imageUrl: "https://images.unsplash.com/photo-1603360946369-dc9bb6258143?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -512,6 +523,7 @@ export class DatabaseStorage implements IStorage {
           "Serve in tortillas with diced onion, cilantro, salsa verde, and lime."
         ]),
         tags: JSON.stringify(["crockpot", "make-ahead", "freezer-friendly"]),
+        imageUrl: "https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=400&h=300&fit=crop",
         isFavorite: 1,
       },
       {
@@ -543,6 +555,7 @@ export class DatabaseStorage implements IStorage {
           "Top with green onions."
         ]),
         tags: JSON.stringify(["quick", "make-ahead"]),
+        imageUrl: "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -575,6 +588,7 @@ export class DatabaseStorage implements IStorage {
           "Serve topped with shredded cheese, sour cream, and tortilla chips."
         ]),
         tags: JSON.stringify(["crockpot", "make-ahead", "freezer-friendly"]),
+        imageUrl: "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -608,6 +622,7 @@ export class DatabaseStorage implements IStorage {
           "Serve topped with grated parmesan."
         ]),
         tags: JSON.stringify(["one-pot", "make-ahead", "freezer-friendly"]),
+        imageUrl: "https://images.unsplash.com/photo-1551462147-ff29053bfc14?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -641,6 +656,7 @@ export class DatabaseStorage implements IStorage {
           "Serve chicken over rice, top with fried egg."
         ]),
         tags: JSON.stringify(["quick"]),
+        imageUrl: "https://images.unsplash.com/photo-1562565652-a0d8f0c59eb4?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -671,6 +687,7 @@ export class DatabaseStorage implements IStorage {
           "Top with sour cream, avocado, and pico de gallo."
         ]),
         tags: JSON.stringify(["quick"]),
+        imageUrl: "https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -705,6 +722,7 @@ export class DatabaseStorage implements IStorage {
           "Serve over rice with naan and cilantro."
         ]),
         tags: JSON.stringify(["crockpot", "make-ahead"]),
+        imageUrl: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
       {
@@ -736,6 +754,7 @@ export class DatabaseStorage implements IStorage {
           "Serve with salsa, sour cream, and guacamole."
         ]),
         tags: JSON.stringify(["quick", "make-ahead"]),
+        imageUrl: "https://images.unsplash.com/photo-1618040996337-56904b7850b9?w=400&h=300&fit=crop",
         isFavorite: 0,
       },
     ];

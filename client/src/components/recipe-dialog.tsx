@@ -214,6 +214,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
     { name: "", amount: 1, unit: "", category: "produce" }
   ]);
   const [instructions, setInstructions] = useState([""]);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: (data: InsertRecipe) => apiRequest("POST", "/api/recipes", data).then(r => r.json()),
@@ -232,7 +233,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
     setName(""); setDescription(""); setCuisine(""); setMealType("");
     setDifficulty("easy"); setPrepTime(10); setCookTime(30); setServings(3);
     setTags([]); setIngredients([{ name: "", amount: 1, unit: "", category: "produce" }]);
-    setInstructions([""]); setImportUrl("");
+    setInstructions([""]); setImportUrl(""); setImageUrl(null);
   }
 
   async function handleImportUrl() {
@@ -255,6 +256,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
       setCookTime(data.cookTime || 30);
       setServings(data.servings || 3);
       setTags(data.tags || []);
+      setImageUrl(data.imageUrl || null);
       if (data.ingredients && data.ingredients.length > 0) {
         setIngredients(data.ingredients.map((i: any) => ({
           name: i.name || "",
@@ -324,6 +326,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
       ingredients: JSON.stringify(filteredIngredients),
       instructions: JSON.stringify(filteredInstructions),
       tags: JSON.stringify(tags),
+      imageUrl,
       isFavorite: 0,
     });
   }

@@ -355,6 +355,18 @@ export async function registerRoutes(server: Server, app: Express) {
       if (prepTime + cookTime <= 30 && prepTime + cookTime > 0) tags.push("quick");
       if (/one.?pot|one.?pan|sheet.?pan/.test(lowerName)) tags.push("one-pot");
 
+      // Extract image URL from JSON-LD
+      let imageUrl: string | null = null;
+      if (recipeData.image) {
+        if (typeof recipeData.image === "string") {
+          imageUrl = recipeData.image;
+        } else if (Array.isArray(recipeData.image)) {
+          imageUrl = typeof recipeData.image[0] === "string" ? recipeData.image[0] : recipeData.image[0]?.url || null;
+        } else if (recipeData.image.url) {
+          imageUrl = recipeData.image.url;
+        }
+      }
+
       res.json({
         name,
         description: description.substring(0, 300),
@@ -367,6 +379,7 @@ export async function registerRoutes(server: Server, app: Express) {
         ingredients,
         instructions,
         tags,
+        imageUrl,
         sourceUrl: url,
       });
     } catch (err: any) {
