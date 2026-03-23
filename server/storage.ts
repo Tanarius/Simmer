@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : undefined,
 });
 
 const db = drizzle(pool);
