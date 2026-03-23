@@ -332,16 +332,73 @@ export async function registerRoutes(server: Server, app: Express) {
     return null;
   }
 
+  /**
+   * Fallback: Try to extract recipe from HTML using common microdata/meta tags
+   */
+  function extractRecipeFallback(html: string): any {
+    // Look for recipe name in meta tags or headings
+    const nameMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
+                      html.match(/<h1[^>]*class=["'][^"']*recipe[^"']*["'][^>]*>([^<]+)<\/h1>/i) ||
+                      html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+    const name = nameMatch ? decodeHtmlEntities(nameMatch[1].trim()) : "Imported Recipe";
+
+    // Look for description in meta tags
+    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+                      html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+    const description = descMatch ? decodeHtmlEntities(descMatch[1].trim()) : "";
+
+    // Look for ingredients in common patterns
+    const ingredientMatches = Array.from(html.matchAll(/<li[^>]*class=["'][^"']*ingredient[^"']*["'][^>]*>([^<]+)<\/li>/gi)) ||
+                             Array.from(html.matchAll(/<span[^>]*itemprop=["']recipeIngredient["'][^>]*>([^<]+)<\/span>/gi)) ||
+                             Array.from(html.matchAll(/data-ingredient=["']([^"']+)["']/gi));
+
+    const ingredients = ingredientMatches.length > 0
+      ? ingredientMatches.map(m => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim())).filter(i => i.length > 0)
+      : [];
+
+    // Look for instructions
+    const instructionMatches = Array.from(html.matchAll(/<li[^>]*class=["'][^"']*instruction[^"']*["'][^>]*>([^<]+)<\/li>/gi)) ||
+                              Array.from(html.matchAll(/<div[^>]*class=["'][^"']*step[^"']*["'][^>]*>([^<]+)<\/div>/gi)) ||
+                              Array.from(html.matchAll(/<span[^>]*itemprop=["']recipeInstructions["'][^>]*>([^<]+)<\/span>/gi));
+
+    const instructions = instructionMatches.length > 0
+      ? instructionMatches.map(m => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim())).filter(i => i.length > 0)
+      : [];
+
+    // Look for image
+    const imageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                       html.match(/<img[^>]*class=["'][^"']*recipe[^"']*["'][^>]*src=["']([^"']+)["']/i);
+    const image = imageMatch ? imageMatch[1] : null;
+
+    // Only return if we found at least a name and some ingredients
+    if (name && ingredients.length > 2) {
+      return {
+        name,
+        description,
+        recipeIngredient: ingredients,
+        recipeInstructions: instructions.length > 0 ? instructions : undefined,
+        image,
+      };
+    }
+
+    return null;
+  }
+
   app.post("/api/recipes/import-url", async (req, res) => {
     const { url } = req.body as { url: string };
     if (!url) return res.status(400).json({ error: "URL is required" });
 
     try {
       const html = await fetchHtml(url);
-      const recipeData = extractRecipeJsonLd(html);
+      let recipeData = extractRecipeJsonLd(html);
+
+      // If JSON-LD extraction failed, try fallback HTML parsing
+      if (!recipeData) {
+        recipeData = extractRecipeFallback(html);
+      }
 
       if (!recipeData) {
-        return res.status(400).json({ error: "Could not find recipe data on this page. The site may not include structured recipe data." });
+        return res.status(400).json({ error: "Could not find recipe data on this page. The site may not include structured recipe data. Try copying the recipe details manually." });
       }
 
       // Extract fields from JSON-LD
@@ -353,8 +410,11 @@ export async function registerRoutes(server: Server, app: Express) {
 
       // Parse ingredients
       const rawIngredients: string[] = recipeData.recipeIngredient || [];
+      if (rawIngredients.length === 0) {
+        console.warn(`No ingredients found for URL: ${url}`);
+      }
       const ingredients = rawIngredients.map((raw: string) => {
-        const clean = raw.replace(/<[^>]*>/g, "").trim(); // strip HTML
+        const clean = decodeHtmlEntities(raw.replace(/<[^>]*>/g, "").trim()); // strip HTML and decode entities
         const parsed = parseIngredientString(clean);
         return {
           name: parsed.name,
@@ -362,23 +422,30 @@ export async function registerRoutes(server: Server, app: Express) {
           unit: parsed.unit,
           category: guessCategory(clean),
         };
-      });
+      }).filter(ing => ing.name && ing.name.length > 0); // Filter out empty ingredients
 
       // Parse instructions
       let instructions: string[] = [];
       if (recipeData.recipeInstructions) {
         if (Array.isArray(recipeData.recipeInstructions)) {
           instructions = recipeData.recipeInstructions.map((step: any) => {
-            if (typeof step === "string") return step.replace(/<[^>]*>/g, "").trim();
-            if (step.text) return step.text.replace(/<[^>]*>/g, "").trim();
+            if (typeof step === "string") return decodeHtmlEntities(step.replace(/<[^>]*>/g, "").trim());
+            if (step.text) return decodeHtmlEntities(step.text.replace(/<[^>]*>/g, "").trim());
             if (step.itemListElement) {
-              return step.itemListElement.map((sub: any) => (sub.text || String(sub)).replace(/<[^>]*>/g, "").trim()).join(" ");
+              return step.itemListElement.map((sub: any) => decodeHtmlEntities((sub.text || String(sub)).replace(/<[^>]*>/g, "").trim())).join(" ");
             }
-            return String(step).replace(/<[^>]*>/g, "").trim();
+            return decodeHtmlEntities(String(step).replace(/<[^>]*>/g, "").trim());
           }).filter((s: string) => s.length > 0);
         } else if (typeof recipeData.recipeInstructions === "string") {
-          instructions = recipeData.recipeInstructions.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim());
+          instructions = recipeData.recipeInstructions.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim()).map(s => decodeHtmlEntities(s.trim()));
         }
+      }
+
+      // Validate we got enough data
+      if (ingredients.length === 0) {
+        return res.status(400).json({
+          error: "Found recipe but no ingredients could be extracted. The site's format may not be supported. Try copying the recipe details manually."
+        });
       }
 
       // Guess cuisine
