@@ -136,7 +136,7 @@ function decodeHtmlEntities(text: string): string {
 }
 
 /**
- * Clean imported text by removing citation references and other junk
+ * Clean imported text by removing citation references and other junk markers
  */
 function cleanImportedText(text: string): string {
   return text
