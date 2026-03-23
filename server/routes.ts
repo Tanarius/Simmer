@@ -339,6 +339,7 @@ export async function registerRoutes(server: Server, app: Express) {
     // Look for recipe name in meta tags or headings
     const nameMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
                       html.match(/<h1[^>]*class=["'][^"']*recipe[^"']*["'][^>]*>([^<]+)<\/h1>/i) ||
+                      html.match(/<h1[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>([^<]+)<\/h1>/i) ||
                       html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
     const name = nameMatch ? decodeHtmlEntities(nameMatch[1].trim()) : "Imported Recipe";
 
@@ -347,19 +348,49 @@ export async function registerRoutes(server: Server, app: Express) {
                       html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
     const description = descMatch ? decodeHtmlEntities(descMatch[1].trim()) : "";
 
-    // Look for ingredients in common patterns
-    const ingredientMatches = Array.from(html.matchAll(/<li[^>]*class=["'][^"']*ingredient[^"']*["'][^>]*>([^<]+)<\/li>/gi)) ||
-                             Array.from(html.matchAll(/<span[^>]*itemprop=["']recipeIngredient["'][^>]*>([^<]+)<\/span>/gi)) ||
-                             Array.from(html.matchAll(/data-ingredient=["']([^"']+)["']/gi));
+    // Strategy 1: Look for ingredients with specific classes/attributes
+    let ingredientMatches = Array.from(html.matchAll(/<li[^>]*class=["'][^"']*ingredient[^"']*["'][^>]*>([^<]+)<\/li>/gi));
+    if (ingredientMatches.length === 0) {
+      ingredientMatches = Array.from(html.matchAll(/<span[^>]*itemprop=["']recipeIngredient["'][^>]*>([^<]+)<\/span>/gi));
+    }
+    if (ingredientMatches.length === 0) {
+      ingredientMatches = Array.from(html.matchAll(/data-ingredient=["']([^"']+)["']/gi));
+    }
+
+    // Strategy 2: If no specific markup, look for lists that might be ingredients
+    // Look for common ingredient patterns (starts with number or fraction)
+    if (ingredientMatches.length === 0) {
+      // Find all <li> tags and filter for ones that look like ingredients
+      const allListItems = Array.from(html.matchAll(/<li[^>]*>([^<]+(?:<[^>]+>[^<]*<\/[^>]+>)*[^<]*)<\/li>/gi));
+      ingredientMatches = allListItems.filter(match => {
+        const text = match[1].replace(/<[^>]*>/g, "").trim();
+        // Ingredient pattern: starts with number, fraction, or common measurement words
+        return /^(\d+\/?\d*|\d*\.?\d+)?\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|lb|pound|g|kg|ml|clove|piece|can|package|bunch)?s?\s+/i.test(text) ||
+               /^(one|two|three|four|five|six|seven|eight|a|an)\s+(cup|tablespoon|teaspoon|pound|can|piece)/i.test(text);
+      });
+    }
 
     const ingredients = ingredientMatches.length > 0
-      ? ingredientMatches.map(m => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim())).filter(i => i.length > 0)
+      ? ingredientMatches.map(m => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim())).filter(i => i.length > 0 && i.length < 200)
       : [];
 
-    // Look for instructions
-    const instructionMatches = Array.from(html.matchAll(/<li[^>]*class=["'][^"']*instruction[^"']*["'][^>]*>([^<]+)<\/li>/gi)) ||
-                              Array.from(html.matchAll(/<div[^>]*class=["'][^"']*step[^"']*["'][^>]*>([^<]+)<\/div>/gi)) ||
-                              Array.from(html.matchAll(/<span[^>]*itemprop=["']recipeInstructions["'][^>]*>([^<]+)<\/span>/gi));
+    // Strategy 1: Look for instructions with specific classes
+    let instructionMatches = Array.from(html.matchAll(/<li[^>]*class=["'][^"']*instruction[^"']*["'][^>]*>([^<]+)<\/li>/gi));
+    if (instructionMatches.length === 0) {
+      instructionMatches = Array.from(html.matchAll(/<div[^>]*class=["'][^"']*step[^"']*["'][^>]*>([^<]+)<\/div>/gi));
+    }
+    if (instructionMatches.length === 0) {
+      instructionMatches = Array.from(html.matchAll(/<span[^>]*itemprop=["']recipeInstructions["'][^>]*>([^<]+)<\/span>/gi));
+    }
+
+    // Strategy 2: Look for ordered lists (often instructions)
+    if (instructionMatches.length === 0) {
+      // Find ordered lists that might contain instructions
+      const olMatch = html.match(/<ol[^>]*>([\s\S]*?)<\/ol>/i);
+      if (olMatch) {
+        instructionMatches = Array.from(olMatch[1].matchAll(/<li[^>]*>(.*?)<\/li>/gi));
+      }
+    }
 
     const instructions = instructionMatches.length > 0
       ? instructionMatches.map(m => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim())).filter(i => i.length > 0)
