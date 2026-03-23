@@ -1,9 +1,9 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const recipes = sqliteTable("recipes", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const recipes = pgTable("recipes", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
   cuisine: text("cuisine").notNull(), // tex-mex, italian, asian, american, other
@@ -20,14 +20,14 @@ export const recipes = sqliteTable("recipes", {
   isFavorite: integer("is_favorite").default(0),
 });
 
-export const weeklyPlans = sqliteTable("weekly_plans", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const weeklyPlans = pgTable("weekly_plans", {
+  id: serial("id").primaryKey(),
   weekStart: text("week_start").notNull(), // ISO date string for Monday
   meals: text("meals").notNull(), // JSON: { mon_lunch: recipeId, mon_dinner: recipeId, ... }
 });
 
-export const pantryStaples = sqliteTable("pantry_staples", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const pantryStaples = pgTable("pantry_staples", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   category: text("category").notNull(), // spices, oils, condiments, grains, etc.
 });

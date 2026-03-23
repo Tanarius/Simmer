@@ -136,84 +136,85 @@ function decodeHtmlEntities(text: string): string {
 }
 
 export async function registerRoutes(server: Server, app: Express) {
-  // Seed default data on first run
-  storage.seedDefaultData();
+  // Initialize database and seed default data on first run
+  await storage.init();
+  await storage.seedDefaultData();
 
   // === RECIPES ===
-  app.get("/api/recipes", (_req, res) => {
-    const recipes = storage.getRecipes();
+  app.get("/api/recipes", async (_req, res) => {
+    const recipes = await storage.getRecipes();
     res.json(recipes);
   });
 
-  app.get("/api/recipes/:id", (req, res) => {
-    const recipe = storage.getRecipe(Number(req.params.id));
+  app.get("/api/recipes/:id", async (req, res) => {
+    const recipe = await storage.getRecipe(Number(req.params.id));
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
-  app.post("/api/recipes", (req, res) => {
+  app.post("/api/recipes", async (req, res) => {
     const parsed = insertRecipeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const recipe = storage.createRecipe(parsed.data);
+    const recipe = await storage.createRecipe(parsed.data);
     res.status(201).json(recipe);
   });
 
-  app.patch("/api/recipes/:id", (req, res) => {
-    const recipe = storage.updateRecipe(Number(req.params.id), req.body);
+  app.patch("/api/recipes/:id", async (req, res) => {
+    const recipe = await storage.updateRecipe(Number(req.params.id), req.body);
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
-  app.delete("/api/recipes/:id", (req, res) => {
-    storage.deleteRecipe(Number(req.params.id));
+  app.delete("/api/recipes/:id", async (req, res) => {
+    await storage.deleteRecipe(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.post("/api/recipes/:id/favorite", (req, res) => {
-    const recipe = storage.toggleFavorite(Number(req.params.id));
+  app.post("/api/recipes/:id/favorite", async (req, res) => {
+    const recipe = await storage.toggleFavorite(Number(req.params.id));
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
   // === WEEKLY PLANS ===
-  app.get("/api/plans", (_req, res) => {
-    const plans = storage.getWeeklyPlans();
+  app.get("/api/plans", async (_req, res) => {
+    const plans = await storage.getWeeklyPlans();
     res.json(plans);
   });
 
-  app.get("/api/plans/:weekStart", (req, res) => {
-    const plan = storage.getWeeklyPlan(req.params.weekStart);
+  app.get("/api/plans/:weekStart", async (req, res) => {
+    const plan = await storage.getWeeklyPlan(req.params.weekStart);
     if (!plan) return res.json({ weekStart: req.params.weekStart, meals: "{}" });
     res.json(plan);
   });
 
-  app.post("/api/plans", (req, res) => {
+  app.post("/api/plans", async (req, res) => {
     const parsed = insertWeeklyPlanSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const plan = storage.upsertWeeklyPlan(parsed.data);
+    const plan = await storage.upsertWeeklyPlan(parsed.data);
     res.json(plan);
   });
 
-  app.delete("/api/plans/:id", (req, res) => {
-    storage.deleteWeeklyPlan(Number(req.params.id));
+  app.delete("/api/plans/:id", async (req, res) => {
+    await storage.deleteWeeklyPlan(Number(req.params.id));
     res.status(204).send();
   });
 
   // === PANTRY STAPLES ===
-  app.get("/api/staples", (_req, res) => {
-    const staples = storage.getPantryStaples();
+  app.get("/api/staples", async (_req, res) => {
+    const staples = await storage.getPantryStaples();
     res.json(staples);
   });
 
-  app.post("/api/staples", (req, res) => {
+  app.post("/api/staples", async (req, res) => {
     const parsed = insertPantryStapleSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const staple = storage.createPantryStaple(parsed.data);
+    const staple = await storage.createPantryStaple(parsed.data);
     res.status(201).json(staple);
   });
 
-  app.delete("/api/staples/:id", (req, res) => {
-    storage.deletePantryStaple(Number(req.params.id));
+  app.delete("/api/staples/:id", async (req, res) => {
+    await storage.deletePantryStaple(Number(req.params.id));
     res.status(204).send();
   });
 
@@ -426,20 +427,20 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === SHOPPING LIST GENERATOR ===
-  app.post("/api/shopping-list", (req, res) => {
+  app.post("/api/shopping-list", async (req, res) => {
     const { recipeIds } = req.body as { recipeIds: number[] };
     if (!recipeIds || !Array.isArray(recipeIds)) {
       return res.status(400).json({ error: "recipeIds array required" });
     }
 
-    const staples = storage.getPantryStaples();
+    const staples = await storage.getPantryStaples();
     const stapleNames = new Set(staples.map(s => s.name.toLowerCase()));
 
     // Collect all ingredients from selected recipes
     const ingredientMap = new Map<string, { name: string; amounts: string[]; category: string; isStaple: boolean }>();
 
     for (const id of recipeIds) {
-      const recipe = storage.getRecipe(id);
+      const recipe = await storage.getRecipe(id);
       if (!recipe) continue;
       
       const ingredients = JSON.parse(recipe.ingredients) as Array<{
