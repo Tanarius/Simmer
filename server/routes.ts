@@ -54,7 +54,7 @@ function guessCuisine(title: string, ingredients: string[]): string {
  * Parse a raw ingredient string like "2 cups all-purpose flour" into structured parts.
  */
 function parseIngredientString(raw: string): { name: string; amount: number; unit: string } {
-  // Clean up common unicode fractions to decimal
+  // Clean up common unicode fractions — replace with space + fraction so "1½" becomes "1 1/2"
   let s = raw.trim()
     .replace(/½/g, " 1/2").replace(/⅓/g, " 1/3").replace(/⅔/g, " 2/3")
     .replace(/¼/g, " 1/4").replace(/¾/g, " 3/4")
@@ -63,33 +63,56 @@ function parseIngredientString(raw: string): { name: string; amount: number; uni
     .replace(/ {2,}/g, " ")
     .trim();
 
-  const unitPattern = "(?:cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|cloves?|cans?|whole|heads?|bunch(?:es)?|packs?|slices?|pieces?|stalks?|bags?|quarts?|gallons?|pints?|liters?|ml|grams?|g|kg|dash(?:es)?|pinch(?:es)?|sprigs?|leaves|sticks?)";
+  const units = "cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|cloves?|cans?|heads?|bunch(?:es)?|packages?|packs?|slices?|pieces?|stalks?|bags?|quarts?|gallons?|pints?|liters?|ml|grams?|g|kg|dash(?:es)?|pinch(?:es)?|sprigs?|leaves|sticks?";
 
-  // Match: optional whole number + optional fraction + optional unit + rest
-  // Handles: "1 1/2 cups flour", "1/3 cup sugar", "2 tbsp oil", "3 cloves garlic"
-  const match = s.match(new RegExp(
-    `^(\\d+)?\\s*(\\d+\\s*/\\s*\\d+)?\\s*(${unitPattern})?\\s*(.*)$`, "i"
-  ));
+  // Strategy: try multiple patterns from most specific to least
 
-  if (match && (match[1] || match[2])) {
-    let amount = 0;
-    const wholeStr = match[1];
-    const fracStr = match[2];
-
-    if (wholeStr) amount += parseFloat(wholeStr) || 0;
-    if (fracStr) {
-      const [num, den] = fracStr.split("/").map(s => parseFloat(s.trim()));
-      if (den) amount += num / den;
-    }
-
-    // Round to 2 decimal places to avoid floating point mess
-    amount = Math.round(amount * 100) / 100;
-
-    const unit = (match[3] || "whole").toLowerCase().replace(/s$/, "");
-    const name = match[4]?.replace(/^[,\s]+/, "").trim() || raw;
-    return { name, amount, unit };
+  // Pattern 1: "1 1/2 cups flour" — whole + fraction + unit + name
+  let match = s.match(new RegExp(`^(\\d+)\\s+(\\d+)\\s*/\\s*(\\d+)\\s+(${units})\\s+(.+)$`, "i"));
+  if (match) {
+    const amount = Math.round((parseInt(match[1]) + parseInt(match[2]) / parseInt(match[3])) * 100) / 100;
+    return { amount, unit: match[4].toLowerCase().replace(/s$/, ""), name: match[5].trim() };
   }
 
+  // Pattern 2: "1/3 cup butter" — fraction + unit + name
+  match = s.match(new RegExp(`^(\\d+)\\s*/\\s*(\\d+)\\s+(${units})\\s+(.+)$`, "i"));
+  if (match) {
+    const amount = Math.round((parseInt(match[1]) / parseInt(match[2])) * 100) / 100;
+    return { amount, unit: match[3].toLowerCase().replace(/s$/, ""), name: match[4].trim() };
+  }
+
+  // Pattern 3: "1 package (14.1 ounces) pie crusts" — number + unit + parenthetical + name
+  match = s.match(new RegExp(`^([\\d.]+)\\s+(${units})\\s*\\([^)]*\\)\\s*(.+)$`, "i"));
+  if (match) {
+    return { amount: Math.round(parseFloat(match[1]) * 100) / 100, unit: match[2].toLowerCase().replace(/s$/, ""), name: match[3].trim() };
+  }
+
+  // Pattern 4: "1 (10.75 ounce) can cream of chicken" — number + parenthetical-unit + unit + name
+  match = s.match(/^([\d.]+)\s*\([^)]*\)\s*(\w+)\s+(.+)$/i);
+  if (match) {
+    return { amount: Math.round(parseFloat(match[1]) * 100) / 100, unit: match[2].toLowerCase().replace(/s$/, ""), name: match[3].trim() };
+  }
+
+  // Pattern 5: "2 cups chicken" — whole + unit + name
+  match = s.match(new RegExp(`^([\\d.]+)\\s+(${units})\\s+(.+)$`, "i"));
+  if (match) {
+    return { amount: Math.round(parseFloat(match[1]) * 100) / 100, unit: match[2].toLowerCase().replace(/s$/, ""), name: match[3].trim() };
+  }
+
+  // Pattern 6: "3 large eggs" or "2 avocados" — number + name (no recognized unit)
+  match = s.match(/^([\d.]+)\s+(.+)$/i);
+  if (match) {
+    return { amount: Math.round(parseFloat(match[1]) * 100) / 100, unit: "whole", name: match[2].trim() };
+  }
+
+  // Pattern 7: just a fraction "1/2" + name — no unit
+  match = s.match(/^(\d+)\s*\/\s*(\d+)\s+(.+)$/i);
+  if (match) {
+    const amount = Math.round((parseInt(match[1]) / parseInt(match[2])) * 100) / 100;
+    return { amount, unit: "whole", name: match[3].trim() };
+  }
+
+  // Fallback: no number found, just use the whole string as the name
   return { name: raw.trim(), amount: 1, unit: "whole" };
 }
 
