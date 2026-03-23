@@ -135,6 +135,24 @@ function decodeHtmlEntities(text: string): string {
     });
 }
 
+/**
+ * Clean imported text by removing citation references and other junk
+ */
+function cleanImportedText(text: string): string {
+  return text
+    // Remove citation references like :contentReference[oaicite:0]{index=0}
+    .replace(/:contentReference\[oaicite:\d+\]\{index:\d+\}/g, "")
+    // Remove other common reference patterns
+    .replace(/\[cite:\d+\]/g, "")
+    .replace(/\[ref\s*\d+\]/gi, "")
+    .replace(/\[\d+\]/g, "") // Remove [1], [2], etc at end of sentences
+    // Remove multiple spaces
+    .replace(/\s{2,}/g, " ")
+    // Clean up spacing around punctuation
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .trim();
+}
+
 export async function registerRoutes(server: Server, app: Express) {
   // Initialize database and seed default data on first run
   await storage.init();
@@ -341,12 +359,12 @@ export async function registerRoutes(server: Server, app: Express) {
                       html.match(/<h1[^>]*class=["'][^"']*recipe[^"']*["'][^>]*>([^<]+)<\/h1>/i) ||
                       html.match(/<h1[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>([^<]+)<\/h1>/i) ||
                       html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-    const name = nameMatch ? decodeHtmlEntities(nameMatch[1].trim()) : "Imported Recipe";
+    const name = nameMatch ? cleanImportedText(decodeHtmlEntities(nameMatch[1].trim())) : "Imported Recipe";
 
     // Look for description in meta tags
     const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
                       html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
-    const description = descMatch ? decodeHtmlEntities(descMatch[1].trim()) : "";
+    const description = descMatch ? cleanImportedText(decodeHtmlEntities(descMatch[1].trim())) : "";
 
     // Strategy 1: Look for ingredients with specific classes/attributes
     let ingredientMatches = Array.from(html.matchAll(/<li[^>]*class=["'][^"']*ingredient[^"']*["'][^>]*>([^<]+)<\/li>/gi));
@@ -371,7 +389,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
 
     const ingredients = ingredientMatches.length > 0
-      ? ingredientMatches.map(m => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim())).filter(i => i.length > 0 && i.length < 200)
+      ? ingredientMatches.map(m => cleanImportedText(decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim()))).filter(i => i.length > 0 && i.length < 200)
       : [];
 
     // Strategy 1: Look for instructions with specific classes
@@ -393,7 +411,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
 
     const instructions = instructionMatches.length > 0
-      ? instructionMatches.map(m => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim())).filter(i => i.length > 0)
+      ? instructionMatches.map(m => cleanImportedText(decodeHtmlEntities(m[1].replace(/<[^>]*>/g, "").trim()))).filter(i => i.length > 0)
       : [];
 
     // Look for image
@@ -433,8 +451,8 @@ export async function registerRoutes(server: Server, app: Express) {
       }
 
       // Extract fields from JSON-LD
-      const name = decodeHtmlEntities((recipeData.name || "Imported Recipe").replace(/<[^>]*>/g, ""));
-      const description = decodeHtmlEntities((recipeData.description || "").replace(/<[^>]*>/g, "")); // strip HTML tags + entities
+      const name = cleanImportedText(decodeHtmlEntities((recipeData.name || "Imported Recipe").replace(/<[^>]*>/g, "")));
+      const description = cleanImportedText(decodeHtmlEntities((recipeData.description || "").replace(/<[^>]*>/g, ""))); // strip HTML tags + entities
       const prepTime = parseDuration(recipeData.prepTime);
       const cookTime = parseDuration(recipeData.cookTime) || parseDuration(recipeData.totalTime);
       const servings = parseInt(recipeData.recipeYield?.[0] || recipeData.recipeYield || "3", 10) || 3;
@@ -445,7 +463,7 @@ export async function registerRoutes(server: Server, app: Express) {
         console.warn(`No ingredients found for URL: ${url}`);
       }
       const ingredients = rawIngredients.map((raw: string) => {
-        const clean = decodeHtmlEntities(raw.replace(/<[^>]*>/g, "").trim()); // strip HTML and decode entities
+        const clean = cleanImportedText(decodeHtmlEntities(raw.replace(/<[^>]*>/g, "").trim())); // strip HTML, decode entities, and clean references
         const parsed = parseIngredientString(clean);
         return {
           name: parsed.name,
@@ -460,15 +478,15 @@ export async function registerRoutes(server: Server, app: Express) {
       if (recipeData.recipeInstructions) {
         if (Array.isArray(recipeData.recipeInstructions)) {
           instructions = recipeData.recipeInstructions.map((step: any) => {
-            if (typeof step === "string") return decodeHtmlEntities(step.replace(/<[^>]*>/g, "").trim());
-            if (step.text) return decodeHtmlEntities(step.text.replace(/<[^>]*>/g, "").trim());
+            if (typeof step === "string") return cleanImportedText(decodeHtmlEntities(step.replace(/<[^>]*>/g, "").trim()));
+            if (step.text) return cleanImportedText(decodeHtmlEntities(step.text.replace(/<[^>]*>/g, "").trim()));
             if (step.itemListElement) {
-              return step.itemListElement.map((sub: any) => decodeHtmlEntities((sub.text || String(sub)).replace(/<[^>]*>/g, "").trim())).join(" ");
+              return step.itemListElement.map((sub: any) => cleanImportedText(decodeHtmlEntities((sub.text || String(sub)).replace(/<[^>]*>/g, "").trim()))).join(" ");
             }
-            return decodeHtmlEntities(String(step).replace(/<[^>]*>/g, "").trim());
+            return cleanImportedText(decodeHtmlEntities(String(step).replace(/<[^>]*>/g, "").trim()));
           }).filter((s: string) => s.length > 0);
         } else if (typeof recipeData.recipeInstructions === "string") {
-          instructions = recipeData.recipeInstructions.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim()).map(s => decodeHtmlEntities(s.trim()));
+          instructions = recipeData.recipeInstructions.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim()).map(s => cleanImportedText(decodeHtmlEntities(s.trim())));
         }
       }
 
