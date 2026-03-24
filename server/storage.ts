@@ -4,8 +4,17 @@ import { recipes, weeklyPlans, pantryStaples } from "@shared/schema";
 import type { Recipe, InsertRecipe, WeeklyPlan, InsertWeeklyPlan, PantryStaple, InsertPantryStaple } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
+// Debug: Log database connection info (sanitized)
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+  console.error("ERROR: DATABASE_URL environment variable is not set!");
+  console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes('DATA')));
+} else {
+  console.log("Database URL found:", dbUrl.substring(0, 30) + "...");
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: dbUrl,
 });
 
 const db = drizzle(pool);
