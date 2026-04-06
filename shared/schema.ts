@@ -1,6 +1,15 @@
-import { pgTable, text, integer, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, serial, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  subscriptionTier: text("subscription_tier").notNull().default('free'),
+  aiCallsToday: integer("ai_calls_today").notNull().default(0),
+  aiCallsResetDate: date("ai_calls_reset_date"), 
+});
 
 export const recipes = pgTable("recipes", {
   id: serial("id").primaryKey(),
@@ -33,11 +42,14 @@ export const pantryStaples = pgTable("pantry_staples", {
 });
 
 // Insert schemas
+export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertRecipeSchema = createInsertSchema(recipes).omit({ id: true });
 export const insertWeeklyPlanSchema = createInsertSchema(weeklyPlans).omit({ id: true });
 export const insertPantryStapleSchema = createInsertSchema(pantryStaples).omit({ id: true });
 
 // Types
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Recipe = typeof recipes.$inferSelect;
 export type InsertRecipe = z.infer<typeof insertRecipeSchema>;
 export type WeeklyPlan = typeof weeklyPlans.$inferSelect;

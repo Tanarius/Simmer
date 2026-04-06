@@ -19,6 +19,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
+import { ShoppingListOptimizer } from "@/components/ShoppingListOptimizer";
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   produce: <Sprout className="h-4 w-4" />,
@@ -67,6 +68,9 @@ export default function ShoppingPage() {
   const { toast } = useToast();
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
+  const [aiOptimizedList, setAiOptimizedList] = useState<any>(null);
+
+
 
   const weekStart = getMondayOfWeek(new Date()).toISOString().split("T")[0];
 
@@ -98,6 +102,15 @@ export default function ShoppingPage() {
     queryFn: () => apiRequest("POST", "/api/shopping-list", { recipeIds }).then(r => r.json()),
     enabled: recipeIds.length > 0,
   });
+
+  const rawItems = useMemo(() => {
+    if (!shoppingList) return [];
+    const items: string[] = [];
+    Object.values(shoppingList.categories).forEach((cat: any) => {
+      cat.forEach((item: any) => items.push(`${item.name} (${item.amounts.join(' + ')})`));
+    });
+    return items;
+  }, [shoppingList]);
 
   // Get recipe names for a given set of IDs (for tooltip)
   function getRecipeNamesForIngredient(ingredientName: string): string[] {
@@ -189,6 +202,12 @@ export default function ShoppingPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {shoppingList && (
+            <ShoppingListOptimizer 
+              currentItems={rawItems} 
+              onOptimized={setAiOptimizedList} 
+            />
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -231,7 +250,25 @@ export default function ShoppingPage() {
           </div>
         ) : shoppingList ? (
           <div className="space-y-6 max-w-2xl">
-            {Object.entries(shoppingList.categories).map(([cat, items]) => {
+            {aiOptimizedList && (
+              <div className="bg-purple-500/10 border border-purple-500/20 p-4 rounded-lg mb-6">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-bold text-purple-400">AI Optimized List</h3>
+                  <Button variant="ghost" size="icon" onClick={() => setAiOptimizedList(null)}>✕</Button>
+                </div>
+                {aiOptimizedList.sections.map((sec: any) => (
+                  <div key={sec.sectionName} className="mb-4">
+                    <h4 className="font-semibold mb-1">{sec.sectionName}</h4>
+                    <ul className="list-disc pl-5 text-sm">
+                      {sec.items.map((item: any) => (
+                        <li key={item.name}>{item.quantity} {item.unit} {item.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!aiOptimizedList && Object.entries(shoppingList.categories).map(([cat, items]) => {
               const categoryCheckedCount = items.filter((item) =>
                 checked.has(`${cat}:${item.name}`)
               ).length;

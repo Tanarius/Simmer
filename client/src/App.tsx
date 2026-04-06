@@ -13,14 +13,32 @@ import RecipesPage from "@/pages/recipes";
 import PlannerPage from "@/pages/planner";
 import ShoppingPage from "@/pages/shopping";
 import PantryPage from "@/pages/pantry";
+import AuthPage from "@/pages/auth-page";
+import PricingPage from "@/pages/pricing";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 
 function AppRouter() {
+  const { data: user, isLoading } = useQuery({
+    queryKey: ["/api/user"],
+    retry: false,
+  });
+
+  if (isLoading) {
+    return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
+  }
+
+  if (!user || user.status === 401 || Object.keys(user).length === 0) {
+    return <AuthPage />;
+  }
+
   return (
     <Switch>
       <Route path="/" component={RecipesPage} />
       <Route path="/planner" component={PlannerPage} />
       <Route path="/shopping" component={ShoppingPage} />
       <Route path="/pantry" component={PantryPage} />
+      <Route path="/pricing" component={PricingPage} />
       <Route component={NotFound} />
     </Switch>
   );

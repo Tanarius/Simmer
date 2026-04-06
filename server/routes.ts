@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { setupAuth } from "./auth";
+import aiRoutes from "./routes/ai";
 import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema } from "@shared/schema";
 
 /**
@@ -154,6 +156,12 @@ function cleanImportedText(text: string): string {
 }
 
 export async function registerRoutes(server: Server, app: Express) {
+  // Setup Authentication
+  setupAuth(app);
+
+  // AI routes
+  app.use("/api/ai", aiRoutes);
+
   // Initialize database and seed default data on first run
   await storage.init();
   await storage.seedDefaultData();

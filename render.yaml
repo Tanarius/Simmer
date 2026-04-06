@@ -9,3 +9,9 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SPOONACULAR_API_KEY
+        sync: false
+      - key: SESSION_SECRET
+        sync: false

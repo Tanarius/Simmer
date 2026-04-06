@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { recipes, weeklyPlans, pantryStaples } from "@shared/schema";
-import type { Recipe, InsertRecipe, WeeklyPlan, InsertWeeklyPlan, PantryStaple, InsertPantryStaple } from "@shared/schema";
+import { recipes, weeklyPlans, pantryStaples, users } from "@shared/schema";
+import type { Recipe, InsertRecipe, WeeklyPlan, InsertWeeklyPlan, PantryStaple, InsertPantryStaple, User, InsertUser } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 // Debug: Log database connection info (sanitized)
@@ -15,6 +15,7 @@ if (!dbUrl) {
 
 const pool = new Pool({
   connectionString: dbUrl,
+  ssl: { rejectUnauthorized: false },
 });
 
 const db = drizzle(pool);
@@ -22,6 +23,14 @@ const db = drizzle(pool);
 export interface IStorage {
   // Init
   init(): Promise<void>;
+
+  // Users
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  getUserAiUsage(userId: number): Promise<{ aiCallsToday: number; aiCallsResetDate: string | null; subscriptionTier: string }>;
+  incrementAiCalls(userId: number): Promise<void>;
+  resetAiCallsIfNewDay(userId: number): Promise<void>;
 
   // Recipes
   getRecipes(): Promise<Recipe[]>;
@@ -50,6 +59,14 @@ export class DatabaseStorage implements IStorage {
   async init(): Promise<void> {
     // Auto-create tables if they don't exist (essential for fresh deployments)
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        subscription_tier TEXT NOT NULL DEFAULT 'free',
+        ai_calls_today INTEGER NOT NULL DEFAULT 0,
+        ai_calls_reset_date DATE
+      );
       CREATE TABLE IF NOT EXISTS recipes (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
@@ -78,6 +95,60 @@ export class DatabaseStorage implements IStorage {
         category TEXT NOT NULL
       );
     `);
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    const rows = await db.select().from(users).where(eq(users.id, id));
+    return rows[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const rows = await db.select().from(users).where(eq(users.username, username));
+    return rows[0];
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const rows = await db.insert(users).values(user).returning();
+    return rows[0];
+  }
+
+  async getUserAiUsage(userId: number): Promise<{ aiCallsToday: number; aiCallsResetDate: string | null; subscriptionTier: string }> {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("User not found");
+    return {
+      aiCallsToday: user.aiCallsToday,
+      aiCallsResetDate: user.aiCallsResetDate,
+      subscriptionTier: user.subscriptionTier,
+    };
+  }
+
+  async incrementAiCalls(userId: number): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) return;
+    const today = new Date().toISOString().split('T')[0];
+    
+    await db.update(users)
+      .set({ 
+        aiCallsToday: user.aiCallsToday + 1,
+        aiCallsResetDate: user.aiCallsResetDate || today,
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async resetAiCallsIfNewDay(userId: number): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) return;
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    if (user.aiCallsResetDate !== todayStr) {
+      await db.update(users)
+        .set({ 
+          aiCallsToday: 0,
+          aiCallsResetDate: todayStr,
+        })
+        .where(eq(users.id, userId));
+    }
   }
 
   async getRecipes(): Promise<Recipe[]> {
