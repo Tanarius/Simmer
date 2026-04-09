@@ -15,6 +15,7 @@ import ShoppingPage from "@/pages/shopping";
 import PantryPage from "@/pages/pantry";
 import AuthPage from "@/pages/auth-page";
 import PricingPage from "@/pages/pricing";
+import ProfilePage from "@/pages/profile";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 
@@ -39,6 +40,7 @@ function AppRouter() {
       <Route path="/shopping" component={ShoppingPage} />
       <Route path="/pantry" component={PantryPage} />
       <Route path="/pricing" component={PricingPage} />
+      <Route path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );

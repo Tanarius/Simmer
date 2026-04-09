@@ -35,13 +35,14 @@ router.post("/suggest", async (req, res, next) => {
 router.post("/weekly-plan", async (req, res, next) => {
   try {
     const { schedule } = req.body;
-    const staples = await storage.getPantryStaples();
+    const userId = (req.user as any).id;
+    const staples = await storage.getPantryStaples(userId);
     const pantryItems = staples.map(s => s.name);
     // Hardcoded recent meals for demo purposes based on prompt constraints
-    const recentMeals = ["Spaghetti", "Tacos"]; 
-    
+    const recentMeals = ["Spaghetti", "Tacos"];
+
     const weeklyPlan = await generateWeeklyPlan(pantryItems, schedule, recentMeals, []);
-    const usage = await storage.getUserAiUsage(req.user!.id);
+    const usage = await storage.getUserAiUsage((req.user as any).id);
     const callsRemaining = usage.subscriptionTier === 'premium' ? 9999 : Math.max(0, 5 - usage.aiCallsToday);
 
     res.json({ weeklyPlan, callsRemaining });
@@ -52,13 +53,14 @@ router.post("/weekly-plan", async (req, res, next) => {
 
 router.post("/optimize-shopping-list", async (req, res, next) => {
   try {
-    const { listItems } = req.body; 
-    const staples = await storage.getPantryStaples();
+    const { listItems } = req.body;
+    const userId = (req.user as any).id;
+    const staples = await storage.getPantryStaples(userId);
     const pantryItems = staples.map(s => s.name);
 
     const optimizedList = await optimizeShoppingList(listItems || [], pantryItems);
-    
-    const usage = await storage.getUserAiUsage(req.user!.id);
+
+    const usage = await storage.getUserAiUsage(userId);
     const callsRemaining = usage.subscriptionTier === 'premium' ? 9999 : Math.max(0, 5 - usage.aiCallsToday);
 
     res.json({ optimizedList, callsRemaining });

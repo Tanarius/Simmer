@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
 const CUISINES = ["all", "tex-mex", "italian", "asian", "american", "other"];
-const MEAL_TYPES = ["all", "lunch", "dinner", "either"];
+const MEAL_TYPES = ["all", "breakfast", "lunch", "dinner", "either"];
 const AVAILABLE_TAGS = ["crockpot", "quick", "make-ahead", "freezer-friendly", "one-pot", "one-pan"];
 
 function parseTags(tagsJson: string | null | undefined): string[] {

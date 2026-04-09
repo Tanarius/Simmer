@@ -3,6 +3,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Express } from "express";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
 
@@ -12,7 +13,7 @@ export function setupAuth(app: Express) {
   // Setup session
   app.use(
     session({
-      secret: process.env.SESSION_SECRET || "default_secret",
+      secret: process.env.SESSION_SECRET!,
       resave: false,
       saveUninitialized: false,
       store: new MemoryStore({
@@ -28,11 +29,21 @@ export function setupAuth(app: Express) {
     new LocalStrategy(async (username, password, done) => {
       try {
         const user = await storage.getUserByUsername(username);
-        // Note: For a production app we'd hash the password. Since this is a simple setup per the instruction constraints, we do plaintext compare.
-        if (!user || user.password !== password) {
-          return done(null, false, { message: "Invalid username or password" });
+        if (!user) return done(null, false, { message: "Invalid username or password" });
+
+        // Try bcrypt compare first
+        const bcryptMatch = await bcrypt.compare(password, user.password).catch(() => false);
+        if (bcryptMatch) return done(null, user);
+
+        // Migration shim: if bcrypt fails, try plaintext (legacy accounts)
+        if (user.password === password) {
+          // Re-hash and save so next login uses bcrypt
+          const hashed = await bcrypt.hash(password, 12);
+          await storage.updateUserPassword(user.id, hashed);
+          return done(null, user);
         }
-        return done(null, user);
+
+        return done(null, false, { message: "Invalid username or password" });
       } catch (err) {
         return done(err);
       }
@@ -60,9 +71,10 @@ export function setupAuth(app: Express) {
         return res.status(400).send("Username already exists");
       }
       
+      const hashedPassword = await bcrypt.hash(req.body.password, 12);
       const user = await storage.createUser({
         username: req.body.username,
-        password: req.body.password,
+        password: hashedPassword,
       });
 
       req.login(user, (err) => {

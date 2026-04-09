@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +23,8 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
   const [busyDays, setBusyDays] = useState<Record<string, boolean>>({});
   const [showLimitModal, setShowLimitModal] = useState(false);
   const { toast } = useToast();
+  const { data: profile } = useQuery({ queryKey: ["/api/profile"], retry: false });
+  const householdSize: number = (profile as any)?.householdSize ?? 1;
 
   const planMutation = useMutation({
     mutationFn: async (schedule: any[]) => {
@@ -57,7 +59,7 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
     const schedule = DAYS_OF_WEEK.map(day => ({
       dayOfWeek: day,
       isBusyDay: !!busyDays[day],
-      peopleHome: 3 // Assumed fixed household size per requirements
+      peopleHome: householdSize,
     }));
     planMutation.mutate(schedule);
   };

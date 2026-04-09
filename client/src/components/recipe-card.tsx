@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Heart, Clock, Utensils, ExternalLink } from "lucide-react";
+import { AddToWeekButton } from "@/components/AddToWeekButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,9 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
             )}
           />
         </Button>
+        {/* Add to week button */}
+        <AddToWeekButton recipeId={recipe.id} recipeName={recipe.name} />
+
         {/* Crockpot indicator */}
         {tags.includes("crockpot") && (
           <span className="absolute top-1.5 left-1.5 bg-black/30 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full">

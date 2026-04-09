@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { enrichWithNutrition, NutritionData } from "./spoonacular";
 
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || "dummy", 
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 // Since the prompt asks for claude-sonnet-4-6 and web_search_20250305, we pass as any to bypass SDK validation if it doesn't recognize the bleeding edge identifiers yet
@@ -34,6 +34,7 @@ export interface UserPrefs {
   cuisines?: string[];
   skillLevel?: string;
   maxPrepTime?: number;
+  householdSize?: number;
 }
 
 export interface MealSlot {
@@ -104,7 +105,7 @@ async function executeClaudeCall(system: string, user: string): Promise<any> {
 
 export async function suggestRecipesFromPantry(ingredients: string[], userPrefs: UserPrefs): Promise<RecipeSuggestion[]> {
   const systemPrompt = "You are an expert chef and meal planning assistant. You have access to web search — use it to find real recipes from cooking websites, blogs, and food publications. Always search the web before responding to find current, authentic recipes.";
-  const userPrompt = `The user has these ingredients available: ${ingredients.join(", ")}. Their preferences: dietary restrictions: ${userPrefs.dietary?.join(",") || "none"}, cuisine preferences: ${userPrefs.cuisines?.join(",") || "any"}, cooking skill level: ${userPrefs.skillLevel || "beginner"}, max prep time: ${userPrefs.maxPrepTime || 60} minutes. Search the web and find 3 recipe ideas that use primarily these ingredients. Return ONLY a JSON array with no markdown, no explanation, just the raw JSON array in this exact structure: [{ name: string, description: string, cuisineType: string, difficulty: 'easy'|'medium'|'hard', estimatedTime: number (minutes), servings: number, ingredients: [{ item: string, amount: string, unit: string, inPantry: boolean }], steps: [{ stepNumber: number, instruction: string, duration?: number }], missingIngredients: string[], tags: string[] }]`;
+  const userPrompt = `The user has these ingredients available: ${ingredients.join(", ")}. Their preferences: dietary restrictions: ${userPrefs.dietary?.join(",") || "none"}, cuisine preferences: ${userPrefs.cuisines?.join(",") || "any"}, cooking skill level: ${userPrefs.skillLevel || "beginner"}, max prep time: ${userPrefs.maxPrepTime || 60} minutes, cooking for ${userPrefs.householdSize || 1} ${(userPrefs.householdSize || 1) === 1 ? "person" : "people"}. Search the web and find 3 recipe ideas that use primarily these ingredients and scale servings to match the household size. Return ONLY a JSON array with no markdown, no explanation, just the raw JSON array in this exact structure: [{ name: string, description: string, cuisineType: string, difficulty: 'easy'|'medium'|'hard', estimatedTime: number (minutes), servings: number, ingredients: [{ item: string, amount: string, unit: string, inPantry: boolean }], steps: [{ stepNumber: number, instruction: string, duration?: number }], missingIngredients: string[], tags: string[] }]`;
 
   const parsedResponse = await executeClaudeCall(systemPrompt, userPrompt) as RecipeSuggestion[];
 

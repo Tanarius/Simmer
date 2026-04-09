@@ -1,8 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { recipes, weeklyPlans, pantryStaples, users } from "@shared/schema";
-import type { Recipe, InsertRecipe, WeeklyPlan, InsertWeeklyPlan, PantryStaple, InsertPantryStaple, User, InsertUser } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { recipes, weeklyPlans, pantryStaples, users, userTasteProfiles } from "@shared/schema";
+import type { Recipe, InsertRecipe, WeeklyPlan, InsertWeeklyPlan, PantryStaple, InsertPantryStaple, User, InsertUser, UserTasteProfile } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 
 // Debug: Log database connection info (sanitized)
 const dbUrl = process.env.DATABASE_URL;
@@ -28,31 +28,37 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserPassword(userId: number, hashedPassword: string): Promise<void>;
   getUserAiUsage(userId: number): Promise<{ aiCallsToday: number; aiCallsResetDate: string | null; subscriptionTier: string }>;
   incrementAiCalls(userId: number): Promise<void>;
   resetAiCallsIfNewDay(userId: number): Promise<void>;
 
   // Recipes
-  getRecipes(): Promise<Recipe[]>;
+  getRecipes(userId: number): Promise<Recipe[]>;
   getRecipe(id: number): Promise<Recipe | undefined>;
-  createRecipe(recipe: InsertRecipe): Promise<Recipe>;
+  createRecipe(recipe: InsertRecipe & { userId: number }): Promise<Recipe>;
   updateRecipe(id: number, recipe: Partial<InsertRecipe>): Promise<Recipe | undefined>;
   deleteRecipe(id: number): Promise<void>;
   toggleFavorite(id: number): Promise<Recipe | undefined>;
 
   // Weekly Plans
-  getWeeklyPlans(): Promise<WeeklyPlan[]>;
-  getWeeklyPlan(weekStart: string): Promise<WeeklyPlan | undefined>;
-  upsertWeeklyPlan(plan: InsertWeeklyPlan): Promise<WeeklyPlan>;
+  getWeeklyPlans(userId: number): Promise<WeeklyPlan[]>;
+  getWeeklyPlan(weekStart: string, userId: number): Promise<WeeklyPlan | undefined>;
+  upsertWeeklyPlan(plan: InsertWeeklyPlan & { userId: number }): Promise<WeeklyPlan>;
   deleteWeeklyPlan(id: number): Promise<void>;
 
   // Pantry Staples
-  getPantryStaples(): Promise<PantryStaple[]>;
-  createPantryStaple(staple: InsertPantryStaple): Promise<PantryStaple>;
+  getPantryStaples(userId: number): Promise<PantryStaple[]>;
+  createPantryStaple(staple: InsertPantryStaple & { userId: number }): Promise<PantryStaple>;
   deletePantryStaple(id: number): Promise<void>;
+
+  // Taste Profile
+  getUserTasteProfile(userId: number): Promise<UserTasteProfile | undefined>;
+  upsertUserTasteProfile(userId: number, data: Partial<Omit<UserTasteProfile, 'id' | 'userId'>>): Promise<UserTasteProfile>;
 
   // Seed
   seedDefaultData(): Promise<void>;
+  seedUserDefaults(userId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -95,6 +101,24 @@ export class DatabaseStorage implements IStorage {
         category TEXT NOT NULL
       );
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_taste_profiles (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+        household_size INTEGER NOT NULL DEFAULT 1,
+        disliked_ingredients TEXT,
+        liked_cuisines TEXT,
+        dietary_restrictions TEXT,
+        complexity_preference TEXT DEFAULT 'medium',
+        breakfast_enabled INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    // Non-destructive migrations: add userId columns if they don't exist yet
+    await pool.query(`
+      ALTER TABLE recipes ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+      ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+      ALTER TABLE pantry_staples ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+    `);
   }
 
   async getUser(id: number): Promise<User | undefined> {
@@ -110,6 +134,10 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     const rows = await db.insert(users).values(user).returning();
     return rows[0];
+  }
+
+  async updateUserPassword(userId: number, hashedPassword: string): Promise<void> {
+    await db.update(users).set({ password: hashedPassword }).where(eq(users.id, userId));
   }
 
   async getUserAiUsage(userId: number): Promise<{ aiCallsToday: number; aiCallsResetDate: string | null; subscriptionTier: string }> {
@@ -151,8 +179,8 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getRecipes(): Promise<Recipe[]> {
-    return await db.select().from(recipes);
+  async getRecipes(userId: number): Promise<Recipe[]> {
+    return await db.select().from(recipes).where(eq(recipes.userId, userId));
   }
 
   async getRecipe(id: number): Promise<Recipe | undefined> {
@@ -160,7 +188,7 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
-  async createRecipe(recipe: InsertRecipe): Promise<Recipe> {
+  async createRecipe(recipe: InsertRecipe & { userId: number }): Promise<Recipe> {
     const rows = await db.insert(recipes).values(recipe).returning();
     return rows[0];
   }
@@ -184,17 +212,18 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
-  async getWeeklyPlans(): Promise<WeeklyPlan[]> {
-    return await db.select().from(weeklyPlans);
+  async getWeeklyPlans(userId: number): Promise<WeeklyPlan[]> {
+    return await db.select().from(weeklyPlans).where(eq(weeklyPlans.userId, userId));
   }
 
-  async getWeeklyPlan(weekStart: string): Promise<WeeklyPlan | undefined> {
-    const rows = await db.select().from(weeklyPlans).where(eq(weeklyPlans.weekStart, weekStart));
+  async getWeeklyPlan(weekStart: string, userId: number): Promise<WeeklyPlan | undefined> {
+    const rows = await db.select().from(weeklyPlans)
+      .where(and(eq(weeklyPlans.weekStart, weekStart), eq(weeklyPlans.userId, userId)));
     return rows[0];
   }
 
-  async upsertWeeklyPlan(plan: InsertWeeklyPlan): Promise<WeeklyPlan> {
-    const existing = await this.getWeeklyPlan(plan.weekStart);
+  async upsertWeeklyPlan(plan: InsertWeeklyPlan & { userId: number }): Promise<WeeklyPlan> {
+    const existing = await this.getWeeklyPlan(plan.weekStart, plan.userId);
     if (existing) {
       const rows = await db.update(weeklyPlans)
         .set({ meals: plan.meals })
@@ -210,11 +239,11 @@ export class DatabaseStorage implements IStorage {
     await db.delete(weeklyPlans).where(eq(weeklyPlans.id, id));
   }
 
-  async getPantryStaples(): Promise<PantryStaple[]> {
-    return await db.select().from(pantryStaples);
+  async getPantryStaples(userId: number): Promise<PantryStaple[]> {
+    return await db.select().from(pantryStaples).where(eq(pantryStaples.userId, userId));
   }
 
-  async createPantryStaple(staple: InsertPantryStaple): Promise<PantryStaple> {
+  async createPantryStaple(staple: InsertPantryStaple & { userId: number }): Promise<PantryStaple> {
     const rows = await db.insert(pantryStaples).values(staple).returning();
     return rows[0];
   }
@@ -223,12 +252,34 @@ export class DatabaseStorage implements IStorage {
     await db.delete(pantryStaples).where(eq(pantryStaples.id, id));
   }
 
-  async seedDefaultData(): Promise<void> {
-    // Check if we already have recipes
-    const existingRecipes = await this.getRecipes();
-    if (existingRecipes.length > 0) return;
+  async getUserTasteProfile(userId: number): Promise<UserTasteProfile | undefined> {
+    const rows = await db.select().from(userTasteProfiles).where(eq(userTasteProfiles.userId, userId));
+    return rows[0];
+  }
 
-    // Seed pantry staples
+  async upsertUserTasteProfile(userId: number, data: Partial<Omit<UserTasteProfile, 'id' | 'userId'>>): Promise<UserTasteProfile> {
+    const existing = await this.getUserTasteProfile(userId);
+    if (existing) {
+      const rows = await db.update(userTasteProfiles)
+        .set(data)
+        .where(eq(userTasteProfiles.userId, userId))
+        .returning();
+      return rows[0];
+    }
+    const rows = await db.insert(userTasteProfiles).values({ userId, ...data }).returning();
+    return rows[0];
+  }
+
+  async seedDefaultData(): Promise<void> {
+    // No-op: pantry seeding is now done per-user on first login via seedUserDefaults()
+  }
+
+  async seedUserDefaults(userId: number): Promise<void> {
+    // Check if user already has staples
+    const existing = await this.getPantryStaples(userId);
+    if (existing.length > 0) return;
+
+    // Seed pantry staples for this user
     const staples = [
       { name: "Salt", category: "spices" },
       { name: "Black pepper", category: "spices" },
@@ -252,10 +303,8 @@ export class DatabaseStorage implements IStorage {
       { name: "Tomato paste", category: "pantry" },
     ];
     for (const s of staples) {
-      await db.insert(pantryStaples).values(s);
+      await db.insert(pantryStaples).values({ ...s, userId });
     }
-
-    // No starter recipes - users will add their own recipes
   }
 }
 

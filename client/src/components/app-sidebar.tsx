@@ -1,5 +1,6 @@
-import { ChefHat, Calendar, ShoppingCart, Package } from "lucide-react";
+import { ChefHat, Calendar, ShoppingCart, Package, UserCircle } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -17,10 +18,14 @@ const navItems = [
   { title: "Weekly Plan", url: "/planner", icon: Calendar },
   { title: "Shopping List", url: "/shopping", icon: ShoppingCart },
   { title: "Pantry", url: "/pantry", icon: Package },
+  { title: "Profile", url: "/profile", icon: UserCircle },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { data: profile } = useQuery({ queryKey: ["/api/profile"], retry: false });
+  const householdSize: number = (profile as any)?.householdSize ?? 1;
+  const householdLabel = householdSize === 1 ? "1 person" : `${householdSize} people`;
 
   return (
     <Sidebar>
@@ -64,7 +69,7 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-base font-semibold text-sidebar-foreground">MealPrep</span>
-            <span className="text-xs text-muted-foreground">3 roommates</span>
+            <span className="text-xs text-muted-foreground">{householdLabel}</span>
           </div>
         </Link>
       </SidebarHeader>

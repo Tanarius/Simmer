@@ -1,4 +1,9 @@
 import "dotenv/config";
+
+// Fail fast if required env vars are missing
+if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required");
+if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required");
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";

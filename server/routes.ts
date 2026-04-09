@@ -3,6 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import aiRoutes from "./routes/ai";
+import { requireAuth } from "./middleware/requireAuth";
 import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema } from "@shared/schema";
 
 /**
@@ -167,81 +168,117 @@ export async function registerRoutes(server: Server, app: Express) {
   await storage.seedDefaultData();
 
   // === RECIPES ===
-  app.get("/api/recipes", async (_req, res) => {
-    const recipes = await storage.getRecipes();
+  app.get("/api/recipes", requireAuth, async (req, res) => {
+    const userId = (req.user as any).id;
+    const recipes = await storage.getRecipes(userId);
     res.json(recipes);
   });
 
-  app.get("/api/recipes/:id", async (req, res) => {
+  app.get("/api/recipes/:id", requireAuth, async (req, res) => {
     const recipe = await storage.getRecipe(Number(req.params.id));
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
-  app.post("/api/recipes", async (req, res) => {
+  app.post("/api/recipes", requireAuth, async (req, res) => {
     const parsed = insertRecipeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const recipe = await storage.createRecipe(parsed.data);
+    const userId = (req.user as any).id;
+    const recipe = await storage.createRecipe({ ...parsed.data, userId });
     res.status(201).json(recipe);
   });
 
-  app.patch("/api/recipes/:id", async (req, res) => {
+  app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
     const recipe = await storage.updateRecipe(Number(req.params.id), req.body);
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
-  app.delete("/api/recipes/:id", async (req, res) => {
+  app.delete("/api/recipes/:id", requireAuth, async (req, res) => {
     await storage.deleteRecipe(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.post("/api/recipes/:id/favorite", async (req, res) => {
+  app.post("/api/recipes/:id/favorite", requireAuth, async (req, res) => {
     const recipe = await storage.toggleFavorite(Number(req.params.id));
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
   // === WEEKLY PLANS ===
-  app.get("/api/plans", async (_req, res) => {
-    const plans = await storage.getWeeklyPlans();
+  app.get("/api/plans", requireAuth, async (req, res) => {
+    const userId = (req.user as any).id;
+    const plans = await storage.getWeeklyPlans(userId);
     res.json(plans);
   });
 
-  app.get("/api/plans/:weekStart", async (req, res) => {
-    const plan = await storage.getWeeklyPlan(req.params.weekStart);
-    if (!plan) return res.json({ weekStart: req.params.weekStart, meals: "{}" });
+  app.get("/api/plans/:weekStart", requireAuth, async (req, res) => {
+    const userId = (req.user as any).id;
+    const weekStart = Array.isArray(req.params.weekStart) ? req.params.weekStart[0] : req.params.weekStart;
+    const plan = await storage.getWeeklyPlan(weekStart, userId);
+    if (!plan) return res.json({ weekStart, meals: "{}" });
     res.json(plan);
   });
 
-  app.post("/api/plans", async (req, res) => {
+  app.post("/api/plans", requireAuth, async (req, res) => {
     const parsed = insertWeeklyPlanSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const plan = await storage.upsertWeeklyPlan(parsed.data);
+    const userId = (req.user as any).id;
+    const plan = await storage.upsertWeeklyPlan({ ...parsed.data, userId });
     res.json(plan);
   });
 
-  app.delete("/api/plans/:id", async (req, res) => {
+  app.delete("/api/plans/:id", requireAuth, async (req, res) => {
     await storage.deleteWeeklyPlan(Number(req.params.id));
     res.status(204).send();
   });
 
   // === PANTRY STAPLES ===
-  app.get("/api/staples", async (_req, res) => {
-    const staples = await storage.getPantryStaples();
+  app.get("/api/staples", requireAuth, async (req, res) => {
+    const userId = (req.user as any).id;
+    await storage.seedUserDefaults(userId);
+    const staples = await storage.getPantryStaples(userId);
     res.json(staples);
   });
 
-  app.post("/api/staples", async (req, res) => {
+  app.post("/api/staples", requireAuth, async (req, res) => {
     const parsed = insertPantryStapleSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const staple = await storage.createPantryStaple(parsed.data);
+    const userId = (req.user as any).id;
+    const staple = await storage.createPantryStaple({ ...parsed.data, userId });
     res.status(201).json(staple);
   });
 
-  app.delete("/api/staples/:id", async (req, res) => {
+  app.delete("/api/staples/:id", requireAuth, async (req, res) => {
     await storage.deletePantryStaple(Number(req.params.id));
     res.status(204).send();
+  });
+
+  // === HOUSEHOLD PROFILE ===
+  app.get("/api/profile", requireAuth, async (req, res) => {
+    const userId = (req.user as any).id;
+    const profile = await storage.getUserTasteProfile(userId);
+    // Return defaults if no profile exists yet
+    res.json(profile ?? {
+      userId,
+      householdSize: 1,
+      dislikedIngredients: null,
+      likedCuisines: null,
+      dietaryRestrictions: null,
+      complexityPreference: "medium",
+      breakfastEnabled: 0,
+    });
+  });
+
+  app.patch("/api/profile", requireAuth, async (req, res) => {
+    const userId = (req.user as any).id;
+    const allowed = ["householdSize", "dislikedIngredients", "likedCuisines", "dietaryRestrictions", "complexityPreference", "breakfastEnabled"] as const;
+    const updates: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (key in req.body) updates[key] = req.body[key];
+    }
+    const profile = await storage.upsertUserTasteProfile(userId, updates);
+    res.json(profile);
   });
 
   // === RECIPE IMPORT FROM URL ===
@@ -441,7 +478,7 @@ export async function registerRoutes(server: Server, app: Express) {
     return null;
   }
 
-  app.post("/api/recipes/import-url", async (req, res) => {
+  app.post("/api/recipes/import-url", requireAuth, async (req, res) => {
     const { url } = req.body as { url: string };
     if (!url) return res.status(400).json({ error: "URL is required" });
 
@@ -551,14 +588,19 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === SHOPPING LIST GENERATOR ===
-  app.post("/api/shopping-list", async (req, res) => {
+  app.post("/api/shopping-list", requireAuth, async (req, res) => {
     const { recipeIds } = req.body as { recipeIds: number[] };
     if (!recipeIds || !Array.isArray(recipeIds)) {
       return res.status(400).json({ error: "recipeIds array required" });
     }
 
-    const staples = await storage.getPantryStaples();
+    const userId = (req.user as any).id;
+    const [staples, profile] = await Promise.all([
+      storage.getPantryStaples(userId),
+      storage.getUserTasteProfile(userId),
+    ]);
     const stapleNames = new Set(staples.map(s => s.name.toLowerCase()));
+    const householdSize = profile?.householdSize ?? 1;
 
     // Collect all ingredients from selected recipes
     const ingredientMap = new Map<string, { name: string; amounts: string[]; category: string; isStaple: boolean }>();
@@ -566,14 +608,22 @@ export async function registerRoutes(server: Server, app: Express) {
     for (const id of recipeIds) {
       const recipe = await storage.getRecipe(id);
       if (!recipe) continue;
-      
-      const ingredients = JSON.parse(recipe.ingredients) as Array<{
-        name: string; amount: number; unit: string; category: string;
-      }>;
+
+      let ingredients: Array<{ name: string; amount: number; unit: string; category: string }>;
+      try {
+        ingredients = JSON.parse(recipe.ingredients);
+      } catch {
+        return res.status(422).json({ error: `Recipe "${recipe.name}" (id ${id}) has corrupted ingredient data` });
+      }
+
+      // Scale amounts by household size relative to recipe servings
+      const recipeServings = recipe.servings || 1;
+      const scaleFactor = householdSize / recipeServings;
 
       for (const ing of ingredients) {
         const key = ing.name.toLowerCase();
-        const amountStr = `${ing.amount} ${ing.unit}`;
+        const scaledAmount = ing.amount ? Math.round(ing.amount * scaleFactor * 10) / 10 : ing.amount;
+        const amountStr = `${scaledAmount || ""} ${ing.unit}`.trim();
         const isStaple = stapleNames.has(key);
 
         if (ingredientMap.has(key)) {
