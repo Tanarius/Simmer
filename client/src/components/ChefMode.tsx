@@ -7,8 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Sparkles, Clock, ChefHat, CheckCircle2, XCircle } from "lucide-react";
 import { AILimitModal } from "./AILimitModal";
 import { useToast } from "@/hooks/use-toast";
-import { generateShoppingListItems } from "@/lib/utils"; // Assume utility exists or mock
-
 export function ChefMode() {
   const [ingredients, setIngredients] = useState("");
   const [showLimitModal, setShowLimitModal] = useState(false);
