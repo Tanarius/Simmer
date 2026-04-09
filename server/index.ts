@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./env";
 
 // Fail fast if required env vars are missing
 if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required");
