@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function AuthPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -23,14 +24,14 @@ export default function AuthPage() {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, ...(!isLogin && inviteCode ? { inviteCode } : {}) }),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/user"], data);
-      toast({ title: isLogin ? "Logged in successfully" : "Registered successfully" });
+      toast({ title: isLogin ? "Logged in successfully" : "Registered successfully", duration: 3000 });
       setLocation("/");
     },
     onError: (err: any) => {
@@ -57,6 +58,19 @@ export default function AuthPage() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="invite">Invite Code (optional)</Label>
+                <Input
+                  id="invite"
+                  placeholder="Join an existing home"
+                  value={inviteCode}
+                  onChange={e => setInviteCode(e.target.value.toUpperCase())}
+                  maxLength={8}
+                />
+                <p className="text-[11px] text-muted-foreground">Leave blank to create a new home</p>
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
               {loginMutation.isPending ? "Please wait..." : (isLogin ? "Login" : "Register")}
             </Button>

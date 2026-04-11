@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   ShoppingCart, Clipboard, Check, Sprout, Beef, Milk,
   Snowflake, Croissant, Package, Wheat, ChefHat, AlertCircle, Calendar, UtensilsCrossed
@@ -66,13 +66,23 @@ interface ShoppingListResponse {
 
 export default function ShoppingPage() {
   const { toast } = useToast();
-  const [checked, setChecked] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [aiOptimizedList, setAiOptimizedList] = useState<any>(null);
 
-
-
   const weekStart = getMondayOfWeek(new Date()).toISOString().split("T")[0];
+  const storageKey = `shopping-checked-${weekStart}`;
+
+  // Persist checked items to localStorage keyed by week — survives refresh
+  const [checked, setChecked] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(storageKey, JSON.stringify([...checked])); } catch { /* ignore */ }
+  }, [checked, storageKey]);
 
   // Get current week's plan
   const { data: plan } = useQuery<WeeklyPlan>({
@@ -88,7 +98,7 @@ export default function ShoppingPage() {
     if (!plan?.meals) return [];
     try {
       const meals = JSON.parse(plan.meals);
-      return [...new Set(Object.values(meals).filter(Boolean) as number[])];
+      return [...new Set(Object.values(meals).filter((v): v is number => typeof v === 'number' && !!v))];
     } catch { return []; }
   }, [plan]);
 

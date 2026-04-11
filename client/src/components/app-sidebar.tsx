@@ -1,5 +1,8 @@
-import { ChefHat, Calendar, ShoppingCart, Package } from "lucide-react";
+import { ChefHat, Calendar, ShoppingCart, Package, Sparkles, LogOut } from "lucide-react";
+import { ActivityFeed } from "@/components/ActivityFeed";
 import { Link, useLocation } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Sidebar,
   SidebarContent,
@@ -10,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 const navItems = [
@@ -21,6 +25,27 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const queryClient = useQueryClient();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  const logoutMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/logout").then(() => {}),
+    onSuccess: () => {
+      queryClient.clear();
+      window.location.href = "/auth";
+    },
+  });
+
+  const { data: user } = useQuery<any>({
+    queryKey: ["/api/user"],
+    staleTime: 60_000,
+  });
+
+  const { data: household } = useQuery<{ name: string; inviteCode: string; members: { id: number; username: string }[] }>({
+    queryKey: ["/api/household"],
+    staleTime: 60_000,
+    enabled: !!user,
+  });
 
   return (
     <Sidebar>
@@ -63,8 +88,14 @@ export function AppSidebar() {
             </svg>
           </div>
           <div className="flex flex-col leading-none">
-            <span className="text-base font-semibold text-sidebar-foreground">MealPrep</span>
-            <span className="text-xs text-muted-foreground">3 roommates</span>
+            <span className="text-base font-semibold text-sidebar-foreground">
+              {household?.name ?? "MealPrep"}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {household
+                ? `${household.members.length} ${household.members.length === 1 ? "member" : "members"}`
+                : "Your home"}
+            </span>
           </div>
         </Link>
       </SidebarHeader>
@@ -86,7 +117,7 @@ export function AppSidebar() {
                       isActive={isActive}
                       data-testid={`nav-${item.title.toLowerCase().replace(" ", "-")}`}
                     >
-                      <Link href={item.url}>
+                      <Link href={item.url} onClick={() => isMobile && setOpenMobile(false)}>
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
                       </Link>
@@ -97,17 +128,53 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarGroup className="mt-4">
+          <SidebarGroupContent>
+            <ActivityFeed />
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === "/profile"}
+                  className="bg-purple-600/10 text-purple-500 hover:bg-purple-600/20 hover:text-purple-600 transition-colors"
+                >
+                  <Link href="/profile">
+                    <Sparkles className="h-4 w-4" />
+                    <span className="font-medium">Profile & Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="px-4 py-3 border-t border-sidebar-border">
-        <a
-          href="https://www.perplexity.ai/computer"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+      <SidebarFooter className="px-4 py-3 border-t border-sidebar-border space-y-2">
+        {user && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1 bg-muted rounded-full px-2 py-0.5 font-mono tabular-nums">
+              AI {user.aiCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 5}
+            </span>
+            <span className="inline-flex items-center gap-1 bg-muted rounded-full px-2 py-0.5 font-mono tabular-nums">
+              Chat {user.copilotCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 20}
+            </span>
+          </div>
+        )}
+        <button
+          onClick={() => logoutMutation.mutate()}
+          disabled={logoutMutation.isPending}
+          className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+          data-testid="button-logout"
         >
-          Created with Perplexity Computer
-        </a>
+          <LogOut className="h-3.5 w-3.5" />
+          Sign out
+        </button>
       </SidebarFooter>
     </Sidebar>
   );

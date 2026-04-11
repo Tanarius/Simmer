@@ -5,9 +5,7 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "dummy", 
 });
 
-// Since the prompt asks for claude-sonnet-4-6 and web_search_20250305, we pass as any to bypass SDK validation if it doesn't recognize the bleeding edge identifiers yet
-const MODEL = "claude-sonnet-4-6" as any;
-const TOOLS: any[] = [{ type: "web_search_20250305", name: "web_search" }];
+const MODEL = "claude-haiku-4-5-20251001";
 
 export interface RecipeSuggestion {
   name: string;
@@ -26,6 +24,7 @@ export interface RecipeSuggestion {
 export interface DaySchedule {
   dayOfWeek: string;
   isBusyDay: boolean;
+  isOffDay?: boolean;
   peopleHome: number;
 }
 
@@ -34,6 +33,7 @@ export interface UserPrefs {
   cuisines?: string[];
   skillLevel?: string;
   maxPrepTime?: number;
+  moodPreference?: string; // "quick meal" | "healthy" | "comfort food" | "surprise me"
 }
 
 export interface MealSlot {
@@ -74,13 +74,12 @@ export interface RecipeTags {
   servingSuggestion: string;
 }
 
-async function executeClaudeCall(system: string, user: string): Promise<any> {
+async function executeClaudeCall(system: string, user: string, maxTokens = 1500): Promise<any> {
   try {
     const msg = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 1500,
+      max_tokens: maxTokens,
       system: system,
-      tools: TOOLS,
       messages: [{ role: "user", content: user }]
     });
 
@@ -104,9 +103,11 @@ async function executeClaudeCall(system: string, user: string): Promise<any> {
 
 export async function suggestRecipesFromPantry(ingredients: string[], userPrefs: UserPrefs): Promise<RecipeSuggestion[]> {
   const systemPrompt = "You are an expert chef and meal planning assistant. You have access to web search — use it to find real recipes from cooking websites, blogs, and food publications. Always search the web before responding to find current, authentic recipes.";
-  const userPrompt = `The user has these ingredients available: ${ingredients.join(", ")}. Their preferences: dietary restrictions: ${userPrefs.dietary?.join(",") || "none"}, cuisine preferences: ${userPrefs.cuisines?.join(",") || "any"}, cooking skill level: ${userPrefs.skillLevel || "beginner"}, max prep time: ${userPrefs.maxPrepTime || 60} minutes. Search the web and find 3 recipe ideas that use primarily these ingredients. Return ONLY a JSON array with no markdown, no explanation, just the raw JSON array in this exact structure: [{ name: string, description: string, cuisineType: string, difficulty: 'easy'|'medium'|'hard', estimatedTime: number (minutes), servings: number, ingredients: [{ item: string, amount: string, unit: string, inPantry: boolean }], steps: [{ stepNumber: number, instruction: string, duration?: number }], missingIngredients: string[], tags: string[] }]`;
+  const moodLine = userPrefs.moodPreference ? `Mood/style: ${userPrefs.moodPreference}. ` : '';
+  const userPrompt = `The user has these ingredients available: ${ingredients.join(", ")}. Their preferences: dietary restrictions: ${userPrefs.dietary?.join(",") || "none"}, cuisine preferences: ${userPrefs.cuisines?.join(",") || "any"}, cooking skill level: ${userPrefs.skillLevel || "beginner"}, max prep time: ${userPrefs.maxPrepTime || 60} minutes. ${moodLine}Find 3 recipe ideas that use primarily these ingredients. Return ONLY a JSON array with no markdown, no explanation, just the raw JSON array in this exact structure: [{ name: string, description: string, cuisineType: string, difficulty: 'easy'|'medium'|'hard', estimatedTime: number (minutes), servings: number, ingredients: [{ item: string, amount: string, unit: string, inPantry: boolean }], steps: [{ stepNumber: number, instruction: string, duration?: number }], missingIngredients: string[], tags: string[] }]`;
 
-  const parsedResponse = await executeClaudeCall(systemPrompt, userPrompt) as RecipeSuggestion[];
+  // 3 full recipes with steps need headroom — 1500 reliably truncates JSON
+  const parsedResponse = await executeClaudeCall(systemPrompt, userPrompt, 4096) as RecipeSuggestion[];
 
   // Run SPOONACULAR in parallel
   const enrichedRecipes = await Promise.allSettled(
@@ -121,10 +122,10 @@ export async function suggestRecipesFromPantry(ingredients: string[], userPrefs:
 }
 
 export async function generateWeeklyPlan(pantryItems: string[], userSchedule: DaySchedule[], recentMeals: string[], householdPrefs: UserPrefs[]): Promise<WeeklyPlan> {
-  const systemPrompt = "You are a meal planning assistant for a shared household. Use web search to find recipe inspiration. Consider ingredient freshness, variety, and the household's combined schedule.";
-  const userPrompt = `Plan 7 days of meals for a shared household. Pantry contents: ${pantryItems.join(", ")}. Weekly schedule by day: ${JSON.stringify(userSchedule)}. Recent meals to avoid repeating: ${recentMeals.join(", ")}. Household dietary preferences combined: ${JSON.stringify(householdPrefs)}. Prioritize using pantry items that expire soonest. Suggest quick meals (under 30 min) on busy days. Return ONLY raw JSON: { weekStartDate: string, days: [{ dayOfWeek: string, isBusyDay: boolean, breakfast: MealSlot|null, lunch: MealSlot|null, dinner: MealSlot }] } where MealSlot is { recipeName: string, estimatedTime: number, servings: number, keyIngredients: string[] }`;
+  const systemPrompt = "You are a meal planning assistant for a shared household. Consider ingredient freshness, variety, and the household's combined schedule.";
+  const userPrompt = `Plan 7 days of meals for a shared household. Pantry contents: ${pantryItems.join(", ")}. Weekly schedule by day: ${JSON.stringify(userSchedule)}. Recent meals to avoid repeating: ${recentMeals.join(", ")}. Household dietary preferences combined: ${JSON.stringify(householdPrefs)}. Prioritize using pantry items that expire soonest. Suggest quick meals (under 30 min) on busy days. CRITICAL: If a day has isOffDay=true, output exactly null for all meals on that day (this means the user is eating out). Return ONLY raw JSON: { weekStartDate: string, days: [{ dayOfWeek: string, isBusyDay: boolean, breakfast: MealSlot|null, lunch: MealSlot|null, dinner: MealSlot|null }] } where MealSlot is { recipeName: string, estimatedTime: number, servings: number, keyIngredients: string[] }`;
 
-  return (await executeClaudeCall(systemPrompt, userPrompt)) as WeeklyPlan;
+  return (await executeClaudeCall(systemPrompt, userPrompt, 3000)) as WeeklyPlan;
 }
 
 export async function optimizeShoppingList(rawItems: string[], pantryItems: string[]): Promise<OptimizedShoppingList> {

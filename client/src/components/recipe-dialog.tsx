@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2, ExternalLink } from "lucide-react";
+import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatTimeBreakdown } from "@/lib/format-time";
+import { groupIngredientsByCategory } from "@/lib/ingredientCategories";
 
 const cuisineColors: Record<string, string> = {
   "tex-mex": "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
@@ -40,13 +41,35 @@ function parseTags(tagsJson: string | null | undefined): string[] {
   try { return JSON.parse(tagsJson); } catch { return []; }
 }
 
-function parseIngredients(ingredientsJson: string): Array<{ name: string; amount: number; unit: string; category: string }> {
-  try { return JSON.parse(ingredientsJson); } catch { return []; }
+function parseIngredients(ingredientsJson: string | null | undefined): Array<{ name: string; amount: number; unit: string; category: string }> {
+  if (!ingredientsJson) return [];
+  try {
+    const result = JSON.parse(ingredientsJson);
+    if (!Array.isArray(result)) return [];
+    return result
+      .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+      .map(item => ({
+        name: String(item.name ?? ''),
+        amount: Number(item.amount) || 0,
+        unit: String(item.unit ?? ''),
+        category: String(item.category ?? 'other'),
+      }));
+  } catch { return []; }
 }
 
 function parseInstructions(instructionsJson: string | null | undefined): string[] {
   if (!instructionsJson) return [];
   try { return JSON.parse(instructionsJson); } catch { return []; }
+}
+
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
 }
 
 /** Format a numeric amount into a clean display string (e.g. 0.5 → "1/2", 1.33 → "1 1/3") */
@@ -100,6 +123,35 @@ interface RecipeViewDialogProps {
 export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editInstructions, setEditInstructions] = useState("");
+  const [scaledServings, setScaledServings] = useState<number | null>(null);
+  const [imgError, setImgError] = useState(false);
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { name: string; instructions: string }) =>
+      apiRequest("PATCH", `/api/recipes/${recipe!.id}`, data).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recipes"] });
+      toast({ title: "Recipe updated" });
+      setEditMode(false);
+    },
+    onError: (err: any) => {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    }
+  });
+
+  function startEdit() {
+    setEditName(recipe!.name);
+    setEditInstructions(parseInstructions(recipe!.instructions).join('\n'));
+    setEditMode(true);
+  }
+
+  function saveEdit() {
+    const steps = editInstructions.split('\n').map(s => s.trim()).filter(Boolean);
+    updateMutation.mutate({ name: editName, instructions: JSON.stringify(steps) });
+  }
 
   const favoriteMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/recipes/${recipe!.id}/favorite`).then(r => r.json()),
@@ -115,125 +167,287 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
     },
   });
 
+  const cleanMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/ai/clean-recipe/${recipe!.id}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to clean recipe");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recipes"] });
+      toast({ title: "Recipe Cleaned! ✨", description: "Standardized instructions and ingredients using Kitchen Copilot." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to clean recipe", description: err.message, variant: "destructive" });
+    }
+  });
+
   if (!recipe) return null;
 
   const tags = parseTags(recipe.tags);
-  const ingredients = parseIngredients(recipe.ingredients);
+  const baseIngredients = parseIngredients(recipe.ingredients);
   const instructions = parseInstructions(recipe.instructions);
 
+  const baseServings = recipe.servings ?? 1;
+  const displayServings = scaledServings ?? baseServings;
+  const scale = displayServings / baseServings;
+
+  const scaledIngredients = baseIngredients.map(ing => ({ ...ing, amount: ing.amount * scale }));
+  const ingredientGroups = groupIngredientsByCategory(scaledIngredients);
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setScaledServings(null); setImgError(false); onClose(); } }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-recipe-view">
-        <DialogHeader className="pb-2">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <DialogTitle className="text-lg font-semibold leading-snug" data-testid="text-recipe-view-name">
-                {recipe.name}
-              </DialogTitle>
-              {recipe.description && (
-                <DialogDescription className="mt-1 text-sm">
-                  {recipe.description}
-                </DialogDescription>
+
+        {/* Recipe photo banner — bleeds to dialog edges via negative margins */}
+        {recipe.imageUrl && !imgError && (
+          <div className="relative h-44 -mx-6 -mt-6 mb-2 overflow-hidden rounded-t-lg shrink-0">
+            <img
+              src={recipe.imageUrl}
+              alt={recipe.name}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            {/* Action buttons — inset from right so they don't clash with the shadcn X button */}
+            <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
+              <Button
+                size="icon"
+                variant="secondary"
+                className={cn("h-8 w-8 bg-background/80 backdrop-blur-sm text-purple-500 hover:bg-background", cleanMutation.isPending && "opacity-50")}
+                onClick={() => cleanMutation.mutate()}
+                disabled={cleanMutation.isPending}
+                title="Clean & Structure with Kitchen Copilot"
+              >
+                {cleanMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              </Button>
+              {editMode ? (
+                <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm text-green-600" onClick={saveEdit} disabled={updateMutation.isPending}>
+                  {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                </Button>
+              ) : (
+                <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm" onClick={startEdit} data-testid="button-edit-recipe">
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
               )}
+              <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm" onClick={() => favoriteMutation.mutate()} data-testid="button-view-favorite">
+                <Heart className={cn("h-3.5 w-3.5", recipe.isFavorite ? "fill-red-500 text-red-500" : "")} />
+              </Button>
             </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => favoriteMutation.mutate()}
-              data-testid="button-view-favorite"
-            >
-              <Heart
-                className={cn("h-4 w-4", recipe.isFavorite ? "fill-red-500 text-red-500" : "text-muted-foreground")}
-              />
-            </Button>
-          </div>
-
-          {/* Metadata */}
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", cuisineColors[recipe.cuisine] ?? cuisineColors["other"])}>
-              {recipe.cuisine}
-            </span>
-            <Badge variant="secondary" className="capitalize">{recipe.mealType === "either" ? "Lunch / Dinner" : recipe.mealType}</Badge>
-            <Badge variant="secondary" className="capitalize">{recipe.difficulty}</Badge>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              {formatTimeBreakdown(recipe.prepTime ?? 0, recipe.cookTime ?? 0)}
-            </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Users className="h-3 w-3" />
-              {recipe.servings} servings
-            </span>
-          </div>
-
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {tags.map((tag) => (
-                <Badge key={tag} variant="outline" className="text-xs capitalize">{tag}</Badge>
-              ))}
-            </div>
-          )}
-
-          {recipe.sourceUrl && (
-            <a
-              href={recipe.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 mt-2 text-xs text-primary hover:underline"
-              data-testid="link-source-url"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ExternalLink className="h-3 w-3" />
-              View Original Recipe
-            </a>
-          )}
-        </DialogHeader>
-
-        <Separator className="my-1" />
-
-        {/* Ingredients */}
-        <div className="mt-3">
-          <h4 className="text-sm font-semibold mb-2">Ingredients</h4>
-          <ul className="space-y-1.5">
-            {ingredients.map((ing, i) => (
-              <li key={i} className="flex items-center gap-2 text-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                <span className="text-foreground">{ing.name}</span>
-                <span className="text-muted-foreground ml-auto shrink-0">{formatAmount(ing.amount)} {ing.unit}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <Separator className="my-3" />
-
-        {/* Instructions */}
-        {instructions.length > 0 && (
-          <div>
-            <h4 className="text-sm font-semibold mb-2">Instructions</h4>
-            <ol className="space-y-2">
-              {instructions.map((step, i) => (
-                <li key={i} className="flex gap-3 text-sm">
-                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 mt-0.5">
-                    {i + 1}
-                  </span>
-                  <span className="text-foreground leading-relaxed">{step}</span>
-                </li>
-              ))}
-            </ol>
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex justify-end mt-4 pt-3 border-t border-border">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-            data-testid="button-delete-recipe"
-          >
-            Delete Recipe
-          </Button>
+        <div>
+          <DialogHeader className="pb-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                {editMode ? (
+                  <Input value={editName} onChange={e => setEditName(e.target.value)} className="text-base font-semibold" data-testid="input-edit-recipe-name" />
+                ) : (
+                  <DialogTitle className="text-lg font-semibold leading-snug" data-testid="text-recipe-view-name">
+                    {recipe.name}
+                  </DialogTitle>
+                )}
+                {recipe.description && (
+                  <DialogDescription className="mt-1 text-sm line-clamp-3 text-muted-foreground">{recipe.description}</DialogDescription>
+                )}
+              </div>
+
+              {/* Action buttons when no image */}
+              {(!recipe.imageUrl || imgError) && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button size="icon" variant="outline" className={cn("text-purple-500 border-purple-200 hover:bg-purple-50 dark:border-purple-800/50 dark:hover:bg-purple-900/30", cleanMutation.isPending && "opacity-50")} onClick={() => cleanMutation.mutate()} disabled={cleanMutation.isPending} title="Clean & Structure with Kitchen Copilot">
+                    {cleanMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  </Button>
+                  {editMode ? (
+                    <Button size="icon" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={saveEdit} disabled={updateMutation.isPending}>
+                      {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    </Button>
+                  ) : (
+                    <Button size="icon" variant="ghost" onClick={startEdit} title="Edit recipe" data-testid="button-edit-recipe">
+                      <Pencil className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  )}
+                  <Button size="icon" variant="ghost" onClick={() => favoriteMutation.mutate()} data-testid="button-view-favorite">
+                    <Heart className={cn("h-4 w-4", recipe.isFavorite ? "fill-red-500 text-red-500" : "text-muted-foreground")} />
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Metadata row */}
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", cuisineColors[recipe.cuisine] ?? cuisineColors["other"])}>
+                {recipe.cuisine}
+              </span>
+              <Badge variant="secondary" className="capitalize">{recipe.mealType === "either" ? "Lunch / Dinner" : recipe.mealType}</Badge>
+              <Badge variant="secondary" className="capitalize">{recipe.difficulty}</Badge>
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                {formatTimeBreakdown(recipe.prepTime ?? 0, recipe.cookTime ?? 0)}
+              </span>
+              {recipe.sourceUrl && (
+                <a href={recipe.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline" data-testid="link-source-url" onClick={e => e.stopPropagation()}>
+                  <ExternalLink className="h-3 w-3" />
+                  Source
+                </a>
+              )}
+            </div>
+
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {tags.map(tag => <Badge key={tag} variant="outline" className="text-xs capitalize">{tag}</Badge>)}
+              </div>
+            )}
+          </DialogHeader>
+
+          <Separator className="my-4" />
+
+          {/* Ingredients + serving scaler */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold">Ingredients</h4>
+              {/* Serving scaler */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Servings</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setScaledServings(s => Math.max(1, (s ?? baseServings) - 1))}
+                    className="flex items-center justify-center w-6 h-6 rounded-full border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Minus className="h-3 w-3" />
+                  </button>
+                  <span className="text-sm font-semibold w-6 text-center tabular-nums">{displayServings}</span>
+                  <button
+                    onClick={() => setScaledServings(s => (s ?? baseServings) + 1)}
+                    className="flex items-center justify-center w-6 h-6 rounded-full border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                </div>
+                {scale !== 1 && (
+                  <button
+                    onClick={() => setScaledServings(null)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Grouped ingredient list */}
+            <div className="space-y-4">
+              {ingredientGroups.map(({ category, items }) => (
+                <div key={category.key}>
+                  <p className={cn("text-xs font-semibold uppercase tracking-wide mb-1.5 flex items-center gap-1.5", category.headerClass)}>
+                    <span>{category.emoji}</span>
+                    {category.label}
+                  </p>
+                  <ul className="space-y-1">
+                    {items.map((ing, i) => (
+                      <li key={i} className="flex items-center gap-3 text-sm py-1 rounded-lg px-2 hover:bg-muted/40 transition-colors group">
+                        <span className={cn("w-1 h-5 rounded-full shrink-0", category.barClass)} />
+                        <span className="text-foreground flex-1">{ing.name}</span>
+                        <span className="text-muted-foreground tabular-nums text-xs shrink-0">
+                          {formatAmount(ing.amount)}{ing.unit ? ` ${ing.unit}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator className="my-4" />
+
+          {/* Chef's Tips */}
+          {recipe.tips && Array.isArray(recipe.tips) && recipe.tips.length > 0 && !editMode && (
+            <>
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3">
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1.5">👨‍🍳 Chef's Tips</p>
+                <ul className="space-y-1">
+                  {recipe.tips.map((tip: string, i: number) => (
+                    <li key={i} className="text-sm text-foreground/80 flex gap-2">
+                      <span className="text-amber-500 shrink-0">•</span>
+                      {tip}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <Separator className="my-4" />
+            </>
+          )}
+
+          {/* Instructions */}
+          {/* No instructions but has source — prompt user to visit original */}
+          {instructions.length === 0 && !editMode && recipe.sourceUrl && (
+            <div className="flex items-center gap-3 p-3.5 rounded-xl bg-muted/40 border border-border text-sm">
+              <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="font-medium text-foreground text-sm">Full instructions on source site</p>
+                <a
+                  href={recipe.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
+                  View full recipe →
+                </a>
+              </div>
+            </div>
+          )}
+
+          {(instructions.length > 0 || editMode) && (
+            <div>
+              <h4 className="text-sm font-semibold mb-3">Instructions</h4>
+              {editMode ? (
+                <div className="space-y-1">
+                  <Textarea
+                    value={editInstructions}
+                    onChange={e => setEditInstructions(e.target.value)}
+                    className="min-h-[180px] text-sm"
+                    placeholder="One step per line"
+                    data-testid="textarea-edit-instructions"
+                  />
+                  <p className="text-xs text-muted-foreground">One step per line</p>
+                </div>
+              ) : (
+                <ol className="space-y-3">
+                  {instructions.map((step, i) => (
+                    <li key={i} className="flex gap-3 text-sm">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0 mt-0.5 tabular-nums">
+                        {i + 1}
+                      </span>
+                      <span className="text-foreground leading-relaxed pt-0.5">{decodeHtmlEntities(step)}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-between mt-6 pt-4 border-t border-border">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending || editMode}
+              data-testid="button-delete-recipe"
+            >
+              Delete Recipe
+            </Button>
+            {editMode && (
+              <Button variant="outline" size="sm" onClick={() => setEditMode(false)}>
+                Cancel
+              </Button>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

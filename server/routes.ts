@@ -3,6 +3,8 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import aiRoutes from "./routes/ai";
+import onboardingRoutes from "./routes/onboarding";
+import { requireAuth, isSafeUrl } from "./middleware/requireAuth";
 import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema } from "@shared/schema";
 
 /**
@@ -23,19 +25,21 @@ function parseDuration(iso: string | undefined | null): number {
 function guessCategory(name: string): string {
   const lower = name.toLowerCase();
   // Protein
-  if (/chicken|beef|pork|sausage|turkey|shrimp|salmon|fish|bacon|steak|lamb|ground|roast/.test(lower)) return "protein";
+  if (/chicken|beef|pork|sausage|turkey|shrimp|salmon|fish|bacon|steak|lamb|ground meat|ground beef|ground turkey|roast|bouillon|broth|stock/.test(lower)) return "protein";
   // Dairy
   if (/cheese|milk|cream|butter|yogurt|egg|sour cream/.test(lower)) return "dairy";
   // Frozen
   if (/frozen/.test(lower)) return "frozen";
   // Bakery
   if (/bread|rolls|bun|tortilla|naan|pita|hoagie|baguette/.test(lower)) return "bakery";
-  // Produce
-  if (/onion|garlic|pepper|tomato|lettuce|avocado|lime|lemon|cilantro|basil|ginger|broccoli|carrot|celery|potato|mushroom|spinach|kale|jalap|zucchini|corn|cucumber|herb|parsley|green onion|scallion/.test(lower)) return "produce";
   // Grains
-  if (/rice|pasta|noodle|quinoa|oat|farro|couscous/.test(lower)) return "grains";
-  // Condiments
-  if (/sauce|vinegar|mustard|ketchup|mayo|sriracha|hot sauce|dressing|salsa/.test(lower)) return "condiments";
+  if (/\brice\b|pasta|noodle|quinoa|\boats\b|farro|couscous|flour|cornstarch|breadcrumb/.test(lower)) return "grains";
+  // Condiments & sauces
+  if (/sauce|vinegar|mustard|ketchup|mayo|sriracha|hot sauce|dressing|salsa|paste|soy sauce|fish sauce|hoisin|teriyaki|worcestershire|oyster sauce/.test(lower)) return "condiments";
+  // Pantry: dried spices, powders, and staples — check BEFORE produce to avoid "garlic powder" → produce
+  if (/powder|dried|flakes|\bsalt\b|pepper\b|paprika|cumin|coriander|oregano|thyme|rosemary|bay leaf|cayenne|chili|turmeric|cinnamon|nutmeg|cloves|allspice|seasoning|spice|herb mix|bouquet|extract|vanilla|baking soda|baking powder|yeast|sugar|brown sugar|honey|syrup|oil|olive oil|vegetable oil|canola|coconut oil|lard|shortening|cornmeal|stock|broth cube|bouillon cube|can |canned|jar |jarred/.test(lower)) return "pantry";
+  // Fresh produce — check after pantry so "garlic powder" doesn't match "garlic" here
+  if (/\bonion\b|fresh garlic|\bgarlic clove|\bpepper\b|bell pepper|tomato|lettuce|avocado|lime|lemon|cilantro|basil|fresh ginger|\bbroccoli\b|carrot|celery|potato|mushroom|spinach|kale|jalap|zucchini|\bcorn\b|cucumber|parsley|green onion|scallion|shallot|leek|fennel|asparagus|artichoke|bok choy|cabbage|beet|radish|turnip|sweet potato|yam|squash|pumpkin/.test(lower)) return "produce";
   // Default to pantry
   return "pantry";
 }
@@ -45,10 +49,14 @@ function guessCategory(name: string): string {
  */
 function guessCuisine(title: string, ingredients: string[]): string {
   const blob = (title + " " + ingredients.join(" ")).toLowerCase();
-  // Check Asian first — it has more specific markers that overlap with other cuisines
-  if (/soy sauce|sesame|teriyaki|stir.?fry|wok|ramen|thai|curry|fish sauce|hoisin|kimchi|miso|pad kra|rice vinegar|bok choy|asian|chinese|japanese|korean|vietnamese|indian|tikka|masala|garam|tandoori|naan|basmati|paneer|samosa|szechuan|kung pao|lo mein|pho|bibimbap|bulgogi/.test(blob)) return "asian";
+  // Asian first — more specific markers that overlap with other cuisines
+  if (/soy sauce|sesame|teriyaki|stir.?fry|wok|ramen|thai|fish sauce|hoisin|kimchi|miso|pad kra|rice vinegar|bok choy|asian|chinese|japanese|korean|vietnamese|szechuan|kung pao|lo mein|pho|bibimbap|bulgogi|sriracha|lemongrass/.test(blob)) return "asian";
+  // Indian — split from Asian for better distinction
+  if (/tikka|masala|garam|tandoori|naan|basmati|paneer|samosa|curry|chutney|dal|dahl|biryani|turmeric|cumin|coriander seed|cardamom|indian/.test(blob)) return "indian";
   if (/taco|enchilada|burrito|salsa|tortilla|quesadilla|fajita|carnitas|chipotle|jalap|tex.?mex|mexican|chile verde|tamale|queso/.test(blob)) return "tex-mex";
   if (/pasta|marinara|parmesan|mozzarella|italian|risotto|penne|fettuccine|lasagna|alfredo|prosciutto|bruschetta|bolognese|carbonara|pesto|gnocchi|ravioli|ciabatta/.test(blob)) return "italian";
+  if (/hummus|falafel|tahini|shawarma|gyro|tzatziki|pita|greek|mediterranean|moroccan|feta|olives|couscous|harissa|za'atar|sumac|kebab|turkish|lebanese/.test(blob)) return "mediterranean";
+  if (/bbq|barbecue|biscuit|gravy|pot roast|corn bread|soul food|southern|cajun|creole|gumbo|jambalaya|mac.?and.?cheese|burger|meatloaf|chili|american|tater tot|casserole|chicken and dump|pulled pork|sloppy joe|wild rice|pot pie|clam chowder|yankee|buffalo wing/.test(blob)) return "american";
   return "other";
 }
 
@@ -159,12 +167,64 @@ export async function registerRoutes(server: Server, app: Express) {
   // Setup Authentication
   setupAuth(app);
 
-  // AI routes
-  app.use("/api/ai", aiRoutes);
+  // AI routes (all require auth)
+  app.use("/api/ai", requireAuth, aiRoutes);
+
+  // Onboarding routes (all require auth)
+  app.use("/api/onboarding", requireAuth, onboardingRoutes);
 
   // Initialize database and seed default data on first run
   await storage.init();
   await storage.seedDefaultData();
+
+  // === OG IMAGE PROXY ===
+  // Extracts og:image from a recipe page URL server-side (avoids CORS)
+  app.get("/api/proxy/og-image", async (req, res) => {
+    const url = req.query.url as string;
+    if (!url || !isSafeUrl(url)) return res.json({ imageUrl: null });
+    try {
+      const response = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; MealPrepApp/1.0; +https://mealprep.app)" },
+        signal: AbortSignal.timeout(6000),
+      });
+      const html = await response.text();
+      // Try multiple og:image patterns (property or name attribute order varies)
+      const match =
+        html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
+        html.match(/<meta[^>]+name=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+      const imageUrl = match?.[1]?.replace(/&amp;/g, "&") || null;
+      return res.json({ imageUrl });
+    } catch {
+      return res.json({ imageUrl: null });
+    }
+  });
+
+  // === DEV UTILITIES ===
+  // Upgrade a user to 'test' tier (50 AI calls/day) — dev only
+  app.post("/api/dev/upgrade-testuser", async (req, res) => {
+    if (process.env.NODE_ENV === "production") return res.status(404).send();
+
+    try {
+      const user = await storage.getUserByUsername("testuser");
+      if (!user) return res.status(404).json({ error: "testuser not found" });
+      await storage.updateUserSubscriptionTier(user.id, "test");
+      res.json({ success: true, message: "testuser upgraded to test tier (50 AI calls/day)" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // === TASTE PROFILE ===
+  app.get("/api/taste-profile", requireAuth, async (req, res) => {
+    const profile = await storage.getUserTasteProfile((req.user as any).id);
+    res.json(profile || {});
+  });
+
+  app.patch("/api/taste-profile", requireAuth, async (req, res) => {
+    await storage.upsertUserTasteProfile((req.user as any).id, req.body);
+    res.json({ success: true });
+  });
 
   // === RECIPES ===
   app.get("/api/recipes", async (_req, res) => {
@@ -178,28 +238,142 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(recipe);
   });
 
-  app.post("/api/recipes", async (req, res) => {
+  app.post("/api/recipes", requireAuth, async (req, res) => {
     const parsed = insertRecipeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
     const recipe = await storage.createRecipe(parsed.data);
     res.status(201).json(recipe);
+    if (req.user) storage.logActivity((req.user as any).id, "recipe_added", recipe.id, recipe.name);
   });
 
-  app.patch("/api/recipes/:id", async (req, res) => {
+  app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
     const recipe = await storage.updateRecipe(Number(req.params.id), req.body);
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
-  app.delete("/api/recipes/:id", async (req, res) => {
-    await storage.deleteRecipe(Number(req.params.id));
+  app.delete("/api/recipes/:id", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await storage.getRecipe(id);
+    await storage.deleteRecipe(id);
     res.status(204).send();
+    if (req.user && existing) storage.logActivity((req.user as any).id, "recipe_deleted", id, existing.name);
   });
 
-  app.post("/api/recipes/:id/favorite", async (req, res) => {
+  app.post("/api/recipes/:id/favorite", requireAuth, async (req, res) => {
     const recipe = await storage.toggleFavorite(Number(req.params.id));
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
+  });
+
+  // === HOUSEHOLD ===
+  // Rate limiter for join attempts: max 10 per IP per minute
+  const joinAttempts = new Map<string, { count: number; resetAt: number }>();
+  function checkJoinRate(ip: string): boolean {
+    const now = Date.now();
+    const slot = joinAttempts.get(ip);
+    if (!slot || now >= slot.resetAt) { joinAttempts.set(ip, { count: 1, resetAt: now + 60_000 }); return true; }
+    if (slot.count >= 10) return false;
+    slot.count++;
+    return true;
+  }
+
+  app.get("/api/household", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    const user = req.user as any;
+    if (!user.householdId) return res.status(404).json({ error: "No household" });
+    const hh = await storage.getHousehold(user.householdId);
+    if (!hh) return res.status(404).json({ error: "Household not found" });
+    const members = await storage.getHouseholdMembers(user.householdId);
+    res.json({ ...hh, members: members.map(m => ({ id: m.id, username: m.username })) });
+  });
+
+  app.patch("/api/household/name", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    const user = req.user as any;
+    if (!user.householdId) return res.status(404).json({ error: "No household" });
+    const { name } = req.body;
+    if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "Name required" });
+    await storage.updateHouseholdName(user.householdId, name.trim());
+    res.json({ success: true });
+  });
+
+  app.post("/api/household/join", async (req, res) => {
+    const ip = (req.ip ?? req.socket.remoteAddress ?? "unknown");
+    if (!checkJoinRate(ip)) return res.status(429).json({ error: "Too many attempts. Try again in a minute." });
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    const user = req.user as any;
+    const code = (req.body.inviteCode ?? "").trim().toUpperCase();
+    if (!code) return res.status(400).json({ error: "Invite code required" });
+    const hh = await storage.getHouseholdByInviteCode(code);
+    if (!hh) return res.status(404).json({ error: "Invalid invite code" });
+    await storage.setUserHousehold(user.id, hh.id);
+    res.json(hh);
+  });
+
+  // Preview a household by invite code (public — no auth required)
+  app.get("/api/household/preview/:code", async (req, res) => {
+    const ip = (req.ip ?? req.socket.remoteAddress ?? "unknown");
+    if (!checkJoinRate(ip)) return res.status(429).json({ error: "Too many attempts." });
+    const code = req.params.code.toUpperCase();
+    const hh = await storage.getHouseholdByInviteCode(code);
+    if (!hh) return res.status(404).json({ error: "Invalid invite code" });
+    const members = await storage.getHouseholdMembers(hh.id);
+    res.json({ id: hh.id, name: hh.name, memberCount: members.length });
+  });
+
+  // Regenerate invite code
+  app.post("/api/household/regenerate", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    const user = req.user as any;
+    if (!user.householdId) return res.status(404).json({ error: "No household" });
+    const { generateInviteCode } = await import("./utils/invite");
+    const newCode = generateInviteCode();
+    await storage.updateHouseholdInviteCode(user.householdId, newCode);
+    res.json({ inviteCode: newCode });
+  });
+
+  // Leave household (creates a new solo home)
+  app.post("/api/household/leave", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    const user = req.user as any;
+    if (!user.householdId) return res.status(404).json({ error: "No household" });
+    const { generateInviteCode } = await import("./utils/invite");
+    const code = generateInviteCode();
+    const hh = await storage.createHousehold(`${user.username}'s Home`, code);
+    await storage.setUserHousehold(user.id, hh.id);
+    res.json(hh);
+  });
+
+  // === ACTIVITY FEED ===
+  app.get("/api/activity", async (_req, res) => {
+    interface ActivityGroup {
+      username: string; action: string; count: number;
+      recipeNames: string[]; recipeIds: number[]; latestAt: string;
+    }
+    const rows = await storage.getRecentActivity(40);
+    const groups: ActivityGroup[] = [];
+    for (const row of rows) {
+      const last = groups[groups.length - 1];
+      const sameWindow = last && last.username === row.username && last.action === row.action &&
+        (new Date(last.latestAt).getTime() - new Date(row.createdAt).getTime()) < 10 * 60 * 1000;
+      if (sameWindow) {
+        last.count++;
+        if (row.recipeName && !last.recipeNames.includes(row.recipeName)) {
+          last.recipeNames.push(row.recipeName);
+          if (row.recipeId) last.recipeIds.push(row.recipeId);
+        }
+      } else {
+        groups.push({
+          username: row.username, action: row.action, count: 1,
+          recipeNames: row.recipeName ? [row.recipeName] : [],
+          recipeIds: row.recipeId ? [row.recipeId] : [],
+          latestAt: row.createdAt.toISOString(),
+        });
+      }
+      if (groups.length >= 8) break;
+    }
+    res.json(groups);
   });
 
   // === WEEKLY PLANS ===
@@ -217,12 +391,51 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/plans", async (req, res) => {
     const parsed = insertWeeklyPlanSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const plan = await storage.upsertWeeklyPlan(parsed.data);
+    const existing = await storage.getWeeklyPlan(parsed.data.weekStart);
+    const planData: any = { ...parsed.data };
+    if (req.body.mealMeta !== undefined) planData.mealMeta = req.body.mealMeta;
+    const plan = await storage.upsertWeeklyPlan(planData);
     res.json(plan);
+    // Diff-based activity logging — log each newly added recipe
+    if (req.user && existing?.meals !== parsed.data.meals) {
+      const userId = (req.user as any).id;
+      const oldMeals: Record<string, any> = existing?.meals ? JSON.parse(existing.meals) : {};
+      const newMeals: Record<string, any> = JSON.parse(parsed.data.meals);
+      const oldVals = new Set(Object.values(oldMeals).map(String));
+      let added = 0;
+      for (const val of Object.values(newMeals)) {
+        if (typeof val === "number" && !oldVals.has(String(val))) {
+          const recipe = await storage.getRecipe(val);
+          storage.logActivity(userId, "plan_meal_added", val, recipe?.name ?? null);
+          added++;
+        }
+      }
+      // Fall back to generic log if nothing was added (e.g. clear-all)
+      if (added === 0) storage.logActivity(userId, "plan_updated");
+    }
   });
 
-  app.delete("/api/plans/:id", async (req, res) => {
+  app.delete("/api/plans/:id", requireAuth, async (req, res) => {
     await storage.deleteWeeklyPlan(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // === MEAL REACTIONS ===
+  app.get("/api/plans/:weekStart/reactions", async (req, res) => {
+    const reactions = await storage.getReactionsForWeek(req.params.weekStart);
+    res.json(reactions);
+  });
+
+  app.post("/api/plans/:weekStart/reactions", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const { slotKey, emoji } = req.body;
+    const userId = (req.user as any).id;
+    if (!slotKey) return res.status(400).json({ error: "slotKey required" });
+    if (!emoji) {
+      await storage.deleteReaction(req.params.weekStart, slotKey, userId);
+    } else {
+      await storage.upsertReaction(req.params.weekStart, slotKey, userId, emoji);
+    }
     res.status(204).send();
   });
 
@@ -232,14 +445,15 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(staples);
   });
 
-  app.post("/api/staples", async (req, res) => {
+  app.post("/api/staples", requireAuth, async (req, res) => {
     const parsed = insertPantryStapleSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
     const staple = await storage.createPantryStaple(parsed.data);
     res.status(201).json(staple);
+    if (req.user) storage.logActivity((req.user as any).id, "pantry_added", null, staple.name);
   });
 
-  app.delete("/api/staples/:id", async (req, res) => {
+  app.delete("/api/staples/:id", requireAuth, async (req, res) => {
     await storage.deletePantryStaple(Number(req.params.id));
     res.status(204).send();
   });
@@ -441,9 +655,9 @@ export async function registerRoutes(server: Server, app: Express) {
     return null;
   }
 
-  app.post("/api/recipes/import-url", async (req, res) => {
+  app.post("/api/recipes/import-url", requireAuth, async (req, res) => {
     const { url } = req.body as { url: string };
-    if (!url) return res.status(400).json({ error: "URL is required" });
+    if (!url || !isSafeUrl(url)) return res.status(400).json({ error: "URL is required and must be a public URL" });
 
     try {
       const html = await fetchHtml(url);
@@ -494,7 +708,7 @@ export async function registerRoutes(server: Server, app: Express) {
             return cleanImportedText(decodeHtmlEntities(String(step).replace(/<[^>]*>/g, "").trim()));
           }).filter((s: string) => s.length > 0);
         } else if (typeof recipeData.recipeInstructions === "string") {
-          instructions = recipeData.recipeInstructions.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim()).map(s => cleanImportedText(decodeHtmlEntities(s.trim())));
+          instructions = recipeData.recipeInstructions.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim()).map((s: string) => cleanImportedText(decodeHtmlEntities(s.trim())));
         }
       }
 
@@ -511,8 +725,13 @@ export async function registerRoutes(server: Server, app: Express) {
       // Guess tags
       const tags: string[] = [];
       const lowerName = name.toLowerCase();
-      if (/crock.?pot|slow.?cook|instant.?pot/.test(lowerName)) tags.push("crockpot");
-      if (prepTime + cookTime <= 30 && prepTime + cookTime > 0) tags.push("quick");
+      const totalMin = prepTime + cookTime;
+      if (/crock.?pot|slow.?cook/.test(lowerName)) tags.push("crockpot");
+      if (/instant.?pot|pressure.?cook/.test(lowerName)) { tags.push("quick"); tags.push("one-pot"); }
+      if (/air.?fry/.test(lowerName)) tags.push("quick");
+      if (/grill|bbq|barbecue/.test(lowerName)) tags.push("grilled");
+      if (totalMin > 0 && totalMin <= 30 && !tags.includes("quick")) tags.push("quick");
+      if (totalMin >= 240 && !tags.includes("crockpot")) tags.push("slow-cook");
       if (/one.?pot|one.?pan|sheet.?pan/.test(lowerName)) tags.push("one-pot");
 
       // Extract image URL from JSON-LD
@@ -567,14 +786,20 @@ export async function registerRoutes(server: Server, app: Express) {
       const recipe = await storage.getRecipe(id);
       if (!recipe) continue;
       
-      const ingredients = JSON.parse(recipe.ingredients) as Array<{
-        name: string; amount: number; unit: string; category: string;
-      }>;
+      let ingredients: Array<{ name: string; amount: number; unit: string; category: string }>;
+      try {
+        ingredients = recipe.ingredients ? JSON.parse(recipe.ingredients) : [];
+      } catch {
+        console.warn(`Skipping recipe ${recipe.id}: malformed ingredients JSON`);
+        continue;
+      }
 
       for (const ing of ingredients) {
         const key = ing.name.toLowerCase();
         const amountStr = `${ing.amount} ${ing.unit}`;
         const isStaple = stapleNames.has(key);
+        // Always re-derive category from name so improvements to guessCategory take effect
+        const category = guessCategory(ing.name);
 
         if (ingredientMap.has(key)) {
           ingredientMap.get(key)!.amounts.push(amountStr);
@@ -582,7 +807,7 @@ export async function registerRoutes(server: Server, app: Express) {
           ingredientMap.set(key, {
             name: ing.name,
             amounts: [amountStr],
-            category: ing.category,
+            category,
             isStaple,
           });
         }

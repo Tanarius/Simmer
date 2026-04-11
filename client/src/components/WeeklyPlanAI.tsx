@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sparkles, Loader2, Calendar } from "lucide-react";
 import { AILimitModal } from "./AILimitModal";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +21,7 @@ const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "S
 
 export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any) => void }) {
   const [open, setOpen] = useState(false);
-  const [busyDays, setBusyDays] = useState<Record<string, boolean>>({});
+  const [dayConfigs, setDayConfigs] = useState<Record<string, 'normal'|'busy'|'off'>>({});
   const [showLimitModal, setShowLimitModal] = useState(false);
   const { toast } = useToast();
 
@@ -28,6 +29,7 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
     mutationFn: async (schedule: any[]) => {
       const res = await fetch("/api/ai/weekly-plan", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ schedule }),
       });
@@ -56,7 +58,9 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
   const handleGenerate = () => {
     const schedule = DAYS_OF_WEEK.map(day => ({
       dayOfWeek: day,
-      isBusyDay: !!busyDays[day],
+      config: dayConfigs[day] || 'normal',
+      isBusyDay: dayConfigs[day] === 'busy', // Backwards compat
+      isOffDay: dayConfigs[day] === 'off',
       peopleHome: 3 // Assumed fixed household size per requirements
     }));
     planMutation.mutate(schedule);
@@ -64,7 +68,7 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
 
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(v) => { if (!v) setDayConfigs({}); setOpen(v); }}>
         <DialogTrigger asChild>
           <Button className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md shadow-purple-500/20">
             <Sparkles className="w-4 h-4 mr-2" />
@@ -84,15 +88,17 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
           <div className="space-y-4 py-4">
             {DAYS_OF_WEEK.map(day => (
               <div key={day} className="flex items-center justify-between">
-                <Label htmlFor={`busy-${day}`} className="text-base">{day}</Label>
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-muted-foreground mr-2">{busyDays[day] ? "Busy" : "Normal"}</span>
-                  <Switch
-                    id={`busy-${day}`}
-                    checked={!!busyDays[day]}
-                    onCheckedChange={(c) => setBusyDays(prev => ({ ...prev, [day]: c }))}
-                  />
-                </div>
+                <Label htmlFor={`config-${day}`} className="text-base">{day}</Label>
+                <Select value={dayConfigs[day] || 'normal'} onValueChange={(val: any) => setDayConfigs(prev => ({...prev, [day]: val}))}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="busy">Busy (&lt; 30 min)</SelectItem>
+                    <SelectItem value="off">Eat Out / Off</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             ))}
           </div>
