@@ -66,7 +66,7 @@ export default function AuthPage() {
                   placeholder="Join an existing home"
                   value={inviteCode}
                   onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                  maxLength={8}
+                  maxLength={16}
                 />
                 <p className="text-[11px] text-muted-foreground">Leave blank to create a new home</p>
               </div>
