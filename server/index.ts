@@ -21,6 +21,10 @@ if (process.env.NODE_ENV === "production") {
 const app = express();
 const httpServer = createServer(app);
 
+// Railway (and most PaaS) terminate SSL at their proxy and forward HTTP internally.
+// Without this, req.secure is always false and express-session won't set Secure cookies.
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
