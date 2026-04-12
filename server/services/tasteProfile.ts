@@ -5,8 +5,8 @@ import { TasteProfile } from "../types/ai";
  * Derives a macro household TasteProfile by inspecting all saved recipes.
  * This acts as the context core for the Copilot's suggestions.
  */
-export async function buildHouseholdTasteProfile(userId: number): Promise<TasteProfile> {
-  const recipes = await storage.getRecipes();
+export async function buildHouseholdTasteProfile(userId: number, householdId: number): Promise<TasteProfile> {
+  const recipes = await storage.getRecipes(householdId);
 
   // Aggregate stats
   const cuisineCounts: Record<string, number> = {};

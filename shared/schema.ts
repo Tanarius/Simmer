@@ -23,6 +23,7 @@ export const users = pgTable("users", {
 
 export const recipes = pgTable("recipes", {
   id: serial("id").primaryKey(),
+  householdId: integer("household_id").references(() => households.id).notNull(),
   name: text("name").notNull(),
   description: text("description"),
   cuisine: text("cuisine").notNull(), // tex-mex, italian, asian, american, other
@@ -56,6 +57,7 @@ export const recipes = pgTable("recipes", {
 
 export const weeklyPlans = pgTable("weekly_plans", {
   id: serial("id").primaryKey(),
+  householdId: integer("household_id").references(() => households.id).notNull(),
   weekStart: text("week_start").notNull(), // ISO date string for Monday
   meals: text("meals").notNull(), // JSON: { mon_lunch: recipeId, mon_dinner: recipeId, ... }
   mealMeta: text("meal_meta"), // JSON: { mon_lunch: { addedBy: "Allie" }, notes: { mon: "pizza night" } }
@@ -63,6 +65,7 @@ export const weeklyPlans = pgTable("weekly_plans", {
 
 export const pantryStaples = pgTable("pantry_staples", {
   id: serial("id").primaryKey(),
+  householdId: integer("household_id").references(() => households.id).notNull(),
   name: text("name").notNull(),
   category: text("category").notNull(), // spices, oils, condiments, grains, etc.
 });
@@ -157,21 +160,22 @@ export const activityLog = pgTable("activity_log", {
 });
 
 // Insert schemas
+// householdId is always injected server-side from the authenticated user — omit from client-facing schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
-export const insertRecipeSchema = createInsertSchema(recipes).omit({ id: true });
-export const insertWeeklyPlanSchema = createInsertSchema(weeklyPlans).omit({ id: true });
-export const insertPantryStapleSchema = createInsertSchema(pantryStaples).omit({ id: true });
+export const insertRecipeSchema = createInsertSchema(recipes).omit({ id: true, householdId: true });
+export const insertWeeklyPlanSchema = createInsertSchema(weeklyPlans).omit({ id: true, householdId: true });
+export const insertPantryStapleSchema = createInsertSchema(pantryStaples).omit({ id: true, householdId: true });
 
 // Types
 export type Household = typeof households.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Recipe = typeof recipes.$inferSelect;
-export type InsertRecipe = z.infer<typeof insertRecipeSchema>;
+export type InsertRecipe = z.infer<typeof insertRecipeSchema> & { householdId: number };
 export type WeeklyPlan = typeof weeklyPlans.$inferSelect;
-export type InsertWeeklyPlan = z.infer<typeof insertWeeklyPlanSchema>;
+export type InsertWeeklyPlan = z.infer<typeof insertWeeklyPlanSchema> & { householdId: number };
 export type PantryStaple = typeof pantryStaples.$inferSelect;
-export type InsertPantryStaple = z.infer<typeof insertPantryStapleSchema>;
+export type InsertPantryStaple = z.infer<typeof insertPantryStapleSchema> & { householdId: number };
 export type UserPreference = typeof userPreferences.$inferSelect;
 export type UserTasteProfile = typeof userTasteProfile.$inferSelect;
 export type CopilotSession = typeof copilotSessions.$inferSelect;

@@ -9,8 +9,9 @@ const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
 }) : null;
 
 export async function chatWithCopilot(
-  userId: number, 
-  sessionId: string, 
+  userId: number,
+  householdId: number,
+  sessionId: string,
   userMessageContent: string
 ): Promise<CopilotMessage> {
   if (!anthropic) {
@@ -18,10 +19,10 @@ export async function chatWithCopilot(
   }
 
   // 1. Fetch complete state context
-  const tasteProfile = await buildHouseholdTasteProfile(userId);
+  const tasteProfile = await buildHouseholdTasteProfile(userId, householdId);
   const userProfile = await storage.getUserTasteProfile(userId);
-  const pantryStaples = await storage.getPantryStaples();
-  const recipes = await storage.getRecipes(); // household recipes
+  const pantryStaples = await storage.getPantryStaples(householdId);
+  const recipes = await storage.getRecipes(householdId);
 
   // Format summaries to save tokens
   const pantryString = pantryStaples.map(s => s.name).join(', ');

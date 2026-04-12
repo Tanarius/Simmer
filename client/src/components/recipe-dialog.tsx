@@ -487,7 +487,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
 
   const createMutation = useMutation({
-    mutationFn: (data: InsertRecipe) => apiRequest("POST", "/api/recipes", data).then(r => r.json()),
+    mutationFn: (data: Omit<InsertRecipe, 'householdId'>) => apiRequest("POST", "/api/recipes", data).then(r => r.json()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/recipes"] });
       toast({ title: "Recipe added!" });

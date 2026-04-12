@@ -11,7 +11,7 @@ import type {
   UserPreference, UserTasteProfile as DbUserTasteProfile, CopilotSession, ActivityLogEntry,
   MealReaction, Household
 } from "@shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 
 const dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) {
@@ -76,27 +76,27 @@ export interface IStorage {
   updateProposedActionStatus(userId: number, sessionId: string, messageId: number, status: 'applied' | 'dismissed'): Promise<void>;
 
   // Recipes & Plans
-  getRecipes(): Promise<Recipe[]>;
-  getRecipe(id: number): Promise<Recipe | undefined>;
+  getRecipes(householdId: number): Promise<Recipe[]>;
+  getRecipe(id: number, householdId?: number): Promise<Recipe | undefined>;
   createRecipe(recipe: InsertRecipe): Promise<Recipe>;
-  updateRecipe(id: number, recipe: Partial<InsertRecipe>): Promise<Recipe | undefined>;
-  deleteRecipe(id: number): Promise<void>;
-  toggleFavorite(id: number): Promise<Recipe | undefined>;
+  updateRecipe(id: number, householdId: number, recipe: Partial<InsertRecipe>): Promise<Recipe | undefined>;
+  deleteRecipe(id: number, householdId: number): Promise<void>;
+  toggleFavorite(id: number, householdId: number): Promise<Recipe | undefined>;
 
-  getWeeklyPlans(): Promise<WeeklyPlan[]>;
-  getWeeklyPlan(weekStart: string): Promise<WeeklyPlan | undefined>;
+  getWeeklyPlans(householdId: number): Promise<WeeklyPlan[]>;
+  getWeeklyPlan(weekStart: string, householdId: number): Promise<WeeklyPlan | undefined>;
   upsertWeeklyPlan(plan: InsertWeeklyPlan): Promise<WeeklyPlan>;
-  deleteWeeklyPlan(id: number): Promise<void>;
+  deleteWeeklyPlan(id: number, householdId: number): Promise<void>;
 
-  getPantryStaples(): Promise<PantryStaple[]>;
+  getPantryStaples(householdId: number): Promise<PantryStaple[]>;
   createPantryStaple(staple: InsertPantryStaple): Promise<PantryStaple>;
-  deletePantryStaple(id: number): Promise<void>;
+  deletePantryStaple(id: number, householdId: number): Promise<void>;
 
   seedDefaultData(): Promise<void>;
 
   // Activity Feed
   logActivity(userId: number, action: string, recipeId?: number | null, recipeName?: string | null): Promise<void>;
-  getRecentActivity(limit?: number): Promise<(ActivityLogEntry & { username: string })[]>;
+  getRecentActivity(householdId: number, limit?: number): Promise<(ActivityLogEntry & { username: string })[]>;
 
   // Meal Reactions
   upsertReaction(weekStart: string, slotKey: string, userId: number, emoji: string): Promise<void>;
@@ -106,7 +106,7 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async init(): Promise<void> {
-    // Auto-migrate: create households table and add householdId to users
+    // Auto-migrate: create households table, add household scoping to core tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS households (
         id SERIAL PRIMARY KEY,
@@ -114,10 +114,16 @@ export class DatabaseStorage implements IStorage {
         invite_code TEXT NOT NULL UNIQUE,
         created_at TIMESTAMP DEFAULT NOW()
       );
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
       INSERT INTO households (id, name, invite_code) VALUES (1, 'Home', 'HOME0001') ON CONFLICT DO NOTHING;
       SELECT setval('households_id_seq', GREATEST((SELECT MAX(id) FROM households), 1));
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
       UPDATE users SET household_id = 1 WHERE household_id IS NULL;
+      ALTER TABLE recipes ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
+      UPDATE recipes SET household_id = 1 WHERE household_id IS NULL;
+      ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
+      UPDATE weekly_plans SET household_id = 1 WHERE household_id IS NULL;
+      ALTER TABLE pantry_staples ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
+      UPDATE pantry_staples SET household_id = 1 WHERE household_id IS NULL;
     `);
   }
 
@@ -393,12 +399,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Recipes & Plans
-  async getRecipes(): Promise<Recipe[]> {
-    return await db.select().from(recipes);
+  async getRecipes(householdId: number): Promise<Recipe[]> {
+    return await db.select().from(recipes).where(eq(recipes.householdId, householdId));
   }
 
-  async getRecipe(id: number): Promise<Recipe | undefined> {
-    const rows = await db.select().from(recipes).where(eq(recipes.id, id));
+  async getRecipe(id: number, householdId?: number): Promise<Recipe | undefined> {
+    const condition = householdId !== undefined
+      ? and(eq(recipes.id, id), eq(recipes.householdId, householdId))
+      : eq(recipes.id, id);
+    const rows = await db.select().from(recipes).where(condition);
     return rows[0];
   }
 
@@ -407,33 +416,38 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
-  async updateRecipe(id: number, recipe: Partial<InsertRecipe>): Promise<Recipe | undefined> {
-    const rows = await db.update(recipes).set(recipe).where(eq(recipes.id, id)).returning();
+  async updateRecipe(id: number, householdId: number, recipe: Partial<InsertRecipe>): Promise<Recipe | undefined> {
+    const rows = await db.update(recipes).set(recipe)
+      .where(and(eq(recipes.id, id), eq(recipes.householdId, householdId)))
+      .returning();
     return rows[0];
   }
 
-  async deleteRecipe(id: number): Promise<void> {
-    await db.delete(recipes).where(eq(recipes.id, id));
+  async deleteRecipe(id: number, householdId: number): Promise<void> {
+    await db.delete(recipes).where(and(eq(recipes.id, id), eq(recipes.householdId, householdId)));
   }
 
-  async toggleFavorite(id: number): Promise<Recipe | undefined> {
-    const existing = await this.getRecipe(id);
+  async toggleFavorite(id: number, householdId: number): Promise<Recipe | undefined> {
+    const existing = await this.getRecipe(id, householdId);
     if (!existing) return undefined;
-    const rows = await db.update(recipes).set({ isFavorite: existing.isFavorite ? 0 : 1 }).where(eq(recipes.id, id)).returning();
+    const rows = await db.update(recipes).set({ isFavorite: existing.isFavorite ? 0 : 1 })
+      .where(and(eq(recipes.id, id), eq(recipes.householdId, householdId)))
+      .returning();
     return rows[0];
   }
 
-  async getWeeklyPlans(): Promise<WeeklyPlan[]> {
-    return await db.select().from(weeklyPlans);
+  async getWeeklyPlans(householdId: number): Promise<WeeklyPlan[]> {
+    return await db.select().from(weeklyPlans).where(eq(weeklyPlans.householdId, householdId));
   }
 
-  async getWeeklyPlan(weekStart: string): Promise<WeeklyPlan | undefined> {
-    const rows = await db.select().from(weeklyPlans).where(eq(weeklyPlans.weekStart, weekStart));
+  async getWeeklyPlan(weekStart: string, householdId: number): Promise<WeeklyPlan | undefined> {
+    const rows = await db.select().from(weeklyPlans)
+      .where(and(eq(weeklyPlans.weekStart, weekStart), eq(weeklyPlans.householdId, householdId)));
     return rows[0];
   }
 
   async upsertWeeklyPlan(plan: InsertWeeklyPlan): Promise<WeeklyPlan> {
-    const existing = await this.getWeeklyPlan(plan.weekStart);
+    const existing = await this.getWeeklyPlan(plan.weekStart, plan.householdId);
     if (existing) {
       const updateSet: Record<string, any> = { meals: plan.meals };
       if ((plan as any).mealMeta !== undefined) updateSet.mealMeta = (plan as any).mealMeta;
@@ -444,12 +458,12 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
-  async deleteWeeklyPlan(id: number): Promise<void> {
-    await db.delete(weeklyPlans).where(eq(weeklyPlans.id, id));
+  async deleteWeeklyPlan(id: number, householdId: number): Promise<void> {
+    await db.delete(weeklyPlans).where(and(eq(weeklyPlans.id, id), eq(weeklyPlans.householdId, householdId)));
   }
 
-  async getPantryStaples(): Promise<PantryStaple[]> {
-    return await db.select().from(pantryStaples);
+  async getPantryStaples(householdId: number): Promise<PantryStaple[]> {
+    return await db.select().from(pantryStaples).where(eq(pantryStaples.householdId, householdId));
   }
 
   async createPantryStaple(staple: InsertPantryStaple): Promise<PantryStaple> {
@@ -457,21 +471,21 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
-  async deletePantryStaple(id: number): Promise<void> {
-    await db.delete(pantryStaples).where(eq(pantryStaples.id, id));
+  async deletePantryStaple(id: number, householdId: number): Promise<void> {
+    await db.delete(pantryStaples).where(and(eq(pantryStaples.id, id), eq(pantryStaples.householdId, householdId)));
   }
 
   async seedDefaultData(): Promise<void> {
-    const existingRecipes = await this.getRecipes();
+    const existingRecipes = await this.getRecipes(1);
     if (existingRecipes.length > 0) return;
 
     const staples = [
-      { name: "Salt", category: "spices" },
-      { name: "Black pepper", category: "spices" },
-      { name: "Garlic powder", category: "spices" },
-      { name: "Olive oil", category: "oils" },
-      { name: "Soy sauce", category: "condiments" },
-      { name: "Rice", category: "grains" }
+      { householdId: 1, name: "Salt", category: "spices" },
+      { householdId: 1, name: "Black pepper", category: "spices" },
+      { householdId: 1, name: "Garlic powder", category: "spices" },
+      { householdId: 1, name: "Olive oil", category: "oils" },
+      { householdId: 1, name: "Soy sauce", category: "condiments" },
+      { householdId: 1, name: "Rice", category: "grains" }
     ];
     for (const s of staples) {
       await db.insert(pantryStaples).values(s);
@@ -482,16 +496,19 @@ export class DatabaseStorage implements IStorage {
     await db.insert(activityLog).values({ userId, action, recipeId: recipeId ?? null, recipeName: recipeName ?? null });
   }
 
-  async getRecentActivity(limit = 40): Promise<(ActivityLogEntry & { username: string })[]> {
-    const rows = await db.select().from(activityLog).orderBy(desc(activityLog.createdAt)).limit(limit);
-    const userMap = new Map<number, string>();
-    for (const row of rows) {
-      if (!userMap.has(row.userId)) {
-        const u = await this.getUser(row.userId);
-        userMap.set(row.userId, u?.username ?? "Someone");
-      }
-    }
-    return rows.map(r => ({ ...r, username: userMap.get(r.userId)! }));
+  async getRecentActivity(householdId: number, limit = 40): Promise<(ActivityLogEntry & { username: string })[]> {
+    // Get user IDs for this household, then filter activity log
+    const members = await this.getHouseholdMembers(householdId);
+    const memberIds = members.map(m => m.id);
+    if (memberIds.length === 0) return [];
+    const rows = await db.select().from(activityLog)
+      .where(memberIds.length === 1
+        ? eq(activityLog.userId, memberIds[0])
+        : inArray(activityLog.userId, memberIds))
+      .orderBy(desc(activityLog.createdAt))
+      .limit(limit);
+    const userMap = new Map<number, string>(members.map(m => [m.id, m.username]));
+    return rows.map(r => ({ ...r, username: userMap.get(r.userId) ?? "Someone" }));
   }
 
   async upsertReaction(weekStart: string, slotKey: string, userId: number, emoji: string): Promise<void> {

@@ -2,7 +2,8 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Express } from "express";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import connectPgSimple from "connect-pg-simple";
+import { Pool } from "pg";
 import bcrypt from "bcrypt";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
@@ -33,17 +34,30 @@ function safeUser(user: any) {
   return safe;
 }
 
-const MemoryStore = createMemoryStore(session);
+const PgSession = connectPgSimple(session);
 
 export function setupAuth(app: Express) {
+  const sessionPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  });
+
   // Setup session
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "default_secret",
       resave: false,
       saveUninitialized: false,
-      store: new MemoryStore({
-        checkPeriod: 86400000, 
+      cookie: {
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+      },
+      store: new PgSession({
+        pool: sessionPool,
+        tableName: "session",
+        createTableIfMissing: true,
       }),
     })
   );

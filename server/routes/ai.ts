@@ -33,7 +33,7 @@ router.post("/copilot/chat", copilotRateLimit, async (req, res, next) => {
     const { sessionId, content } = req.body;
     if (!sessionId || !content) return res.status(400).json({ error: "Missing sessionId or content" });
 
-    const reply = await chatWithCopilot((req.user as any).id, sessionId, content);
+    const reply = await chatWithCopilot((req.user as any).id, (req.user as any).householdId, sessionId, content);
     
     // Usage remaining calculation
     const usage = await storage.getUserAiUsage((req.user as any).id);
@@ -112,6 +112,7 @@ router.post("/copilot/execute-tool", async (req, res, next) => {
           if (p.servingSuggestion) tips.push(`Serving: ${p.servingSuggestion}`);
 
           const recipe = await storage.createRecipe({
+            householdId: (req.user as any).householdId,
             name: p.name,
             cuisine: p.cuisine || 'other',
             ingredients: JSON.stringify(structuredIngredients),
@@ -133,10 +134,12 @@ router.post("/copilot/execute-tool", async (req, res, next) => {
         }
 
         case 'add_to_weekly_plan':
-          const weekPlan = await storage.getWeeklyPlan(p.weekStart);
+          const householdIdForPlan = (req.user as any).householdId;
+          const weekPlan = await storage.getWeeklyPlan(p.weekStart, householdIdForPlan);
           let meals = weekPlan ? JSON.parse(weekPlan.meals) : {};
           meals[`${p.dayOfWeek}_${p.mealType}`] = p.recipeName; // naive implementation for demo
           await storage.upsertWeeklyPlan({
+            householdId: householdIdForPlan,
             weekStart: p.weekStart,
             meals: JSON.stringify(meals)
           });
@@ -255,7 +258,8 @@ router.use(aiRateLimit);
 router.post("/clean-recipe/:id", async (req, res, next) => {
   try {
     const recipeId = parseInt(req.params.id);
-    const dbRecipe = await storage.getRecipe(recipeId);
+    const householdId = (req.user as any).householdId;
+    const dbRecipe = await storage.getRecipe(recipeId, householdId);
     if (!dbRecipe) return res.status(404).json({ error: "Recipe not found" });
 
     // Assuming we have basic raw representation
@@ -274,7 +278,7 @@ router.post("/clean-recipe/:id", async (req, res, next) => {
     );
 
     // Update DB
-    await storage.updateRecipe(recipeId, {
+    await storage.updateRecipe(recipeId, householdId, {
       isProcessed: true,
       rawInstructions: dbRecipe.instructions,
       instructions: JSON.stringify(flatSteps),
@@ -329,7 +333,7 @@ router.post("/suggest", async (req, res, next) => {
     // Fall back to pantry staples when no ingredients supplied
     let ingredientList: string[] = ingredients && ingredients.length > 0 ? ingredients : [];
     if (ingredientList.length === 0) {
-      const staples = await storage.getPantryStaples();
+      const staples = await storage.getPantryStaples((req.user as any).householdId);
       ingredientList = staples.map(s => s.name);
     }
 
@@ -356,8 +360,9 @@ router.post("/weekly-plan", async (req, res, next) => {
     const { schedule } = req.body;
     const userId = (req.user as any).id;
 
+    const householdId = (req.user as any).householdId;
     const [staples, recentMeals, tasteProfile] = await Promise.all([
-      storage.getPantryStaples(),
+      storage.getPantryStaples(householdId),
       storage.getRecentMealNames(14),
       storage.getUserTasteProfile(userId),
     ]);
@@ -390,7 +395,7 @@ router.post("/weekly-plan", async (req, res, next) => {
 router.post("/optimize-shopping-list", async (req, res, next) => {
   try {
     const { listItems } = req.body; 
-    const staples = await storage.getPantryStaples();
+    const staples = await storage.getPantryStaples((req.user as any).householdId);
     const pantryItems = staples.map(s => s.name);
 
     const optimizedList = await optimizeShoppingList(listItems || [], pantryItems);
@@ -406,7 +411,7 @@ router.post("/optimize-shopping-list", async (req, res, next) => {
 router.post("/tag-recipe", async (req, res, next) => {
   try {
     const { recipeId } = req.body;
-    const recipe = await storage.getRecipe(recipeId);
+    const recipe = await storage.getRecipe(recipeId, (req.user as any).householdId);
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
 
     try {
@@ -415,7 +420,7 @@ router.post("/tag-recipe", async (req, res, next) => {
       
       const tags = await autoTagRecipe(recipe.name, parsedIngredients, stepStrings);
       
-      await storage.updateRecipe(recipeId, {
+      await storage.updateRecipe(recipeId, (req.user as any).householdId, {
         tags: JSON.stringify(tags.dietaryFlags || []),
         difficulty: tags.difficulty || 'medium',
         prepTime: tags.prepTime || 15,

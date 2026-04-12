@@ -5,7 +5,7 @@ import { setupAuth } from "./auth";
 import aiRoutes from "./routes/ai";
 import onboardingRoutes from "./routes/onboarding";
 import { requireAuth, isSafeUrl } from "./middleware/requireAuth";
-import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema } from "@shared/schema";
+import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, type InsertWeeklyPlan } from "@shared/schema";
 
 /**
  * Parse an ISO 8601 duration (e.g. PT1H30M, PT45M, PT2H) into minutes.
@@ -227,41 +227,47 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === RECIPES ===
-  app.get("/api/recipes", async (_req, res) => {
-    const recipes = await storage.getRecipes();
+  app.get("/api/recipes", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
+    const recipes = await storage.getRecipes(householdId);
     res.json(recipes);
   });
 
-  app.get("/api/recipes/:id", async (req, res) => {
-    const recipe = await storage.getRecipe(Number(req.params.id));
+  app.get("/api/recipes/:id", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
+    const recipe = await storage.getRecipe(Number(req.params.id), householdId);
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
   app.post("/api/recipes", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
     const parsed = insertRecipeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const recipe = await storage.createRecipe(parsed.data);
+    const recipe = await storage.createRecipe({ ...parsed.data, householdId });
     res.status(201).json(recipe);
-    if (req.user) storage.logActivity((req.user as any).id, "recipe_added", recipe.id, recipe.name);
+    storage.logActivity((req.user as any).id, "recipe_added", recipe.id, recipe.name);
   });
 
   app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
-    const recipe = await storage.updateRecipe(Number(req.params.id), req.body);
+    const householdId = (req.user as any).householdId;
+    const recipe = await storage.updateRecipe(Number(req.params.id), householdId, req.body);
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
 
   app.delete("/api/recipes/:id", requireAuth, async (req, res) => {
     const id = Number(req.params.id);
-    const existing = await storage.getRecipe(id);
-    await storage.deleteRecipe(id);
+    const householdId = (req.user as any).householdId;
+    const existing = await storage.getRecipe(id, householdId);
+    await storage.deleteRecipe(id, householdId);
     res.status(204).send();
-    if (req.user && existing) storage.logActivity((req.user as any).id, "recipe_deleted", id, existing.name);
+    if (existing) storage.logActivity((req.user as any).id, "recipe_deleted", id, existing.name);
   });
 
   app.post("/api/recipes/:id/favorite", requireAuth, async (req, res) => {
-    const recipe = await storage.toggleFavorite(Number(req.params.id));
+    const householdId = (req.user as any).householdId;
+    const recipe = await storage.toggleFavorite(Number(req.params.id), householdId);
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
@@ -346,12 +352,13 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === ACTIVITY FEED ===
-  app.get("/api/activity", async (_req, res) => {
+  app.get("/api/activity", requireAuth, async (req, res) => {
     interface ActivityGroup {
       username: string; action: string; count: number;
       recipeNames: string[]; recipeIds: number[]; latestAt: string;
     }
-    const rows = await storage.getRecentActivity(40);
+    const householdId = (req.user as any).householdId;
+    const rows = await storage.getRecentActivity(householdId, 40);
     const groups: ActivityGroup[] = [];
     for (const row of rows) {
       const last = groups[groups.length - 1];
@@ -377,27 +384,30 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === WEEKLY PLANS ===
-  app.get("/api/plans", async (_req, res) => {
-    const plans = await storage.getWeeklyPlans();
+  app.get("/api/plans", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
+    const plans = await storage.getWeeklyPlans(householdId);
     res.json(plans);
   });
 
-  app.get("/api/plans/:weekStart", async (req, res) => {
-    const plan = await storage.getWeeklyPlan(req.params.weekStart);
+  app.get("/api/plans/:weekStart", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
+    const plan = await storage.getWeeklyPlan(req.params.weekStart as string, householdId);
     if (!plan) return res.json({ weekStart: req.params.weekStart, meals: "{}" });
     res.json(plan);
   });
 
-  app.post("/api/plans", async (req, res) => {
+  app.post("/api/plans", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
     const parsed = insertWeeklyPlanSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const existing = await storage.getWeeklyPlan(parsed.data.weekStart);
-    const planData: any = { ...parsed.data };
-    if (req.body.mealMeta !== undefined) planData.mealMeta = req.body.mealMeta;
+    const existing = await storage.getWeeklyPlan(parsed.data.weekStart, householdId);
+    const planData: InsertWeeklyPlan = { ...parsed.data, householdId };
+    if (req.body.mealMeta !== undefined) (planData as any).mealMeta = req.body.mealMeta;
     const plan = await storage.upsertWeeklyPlan(planData);
     res.json(plan);
     // Diff-based activity logging — log each newly added recipe
-    if (req.user && existing?.meals !== parsed.data.meals) {
+    if (existing?.meals !== parsed.data.meals) {
       const userId = (req.user as any).id;
       const oldMeals: Record<string, any> = existing?.meals ? JSON.parse(existing.meals) : {};
       const newMeals: Record<string, any> = JSON.parse(parsed.data.meals);
@@ -410,13 +420,13 @@ export async function registerRoutes(server: Server, app: Express) {
           added++;
         }
       }
-      // Fall back to generic log if nothing was added (e.g. clear-all)
       if (added === 0) storage.logActivity(userId, "plan_updated");
     }
   });
 
   app.delete("/api/plans/:id", requireAuth, async (req, res) => {
-    await storage.deleteWeeklyPlan(Number(req.params.id));
+    const householdId = (req.user as any).householdId;
+    await storage.deleteWeeklyPlan(Number(req.params.id), householdId);
     res.status(204).send();
   });
 
@@ -440,21 +450,24 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === PANTRY STAPLES ===
-  app.get("/api/staples", async (_req, res) => {
-    const staples = await storage.getPantryStaples();
+  app.get("/api/staples", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
+    const staples = await storage.getPantryStaples(householdId);
     res.json(staples);
   });
 
   app.post("/api/staples", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
     const parsed = insertPantryStapleSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-    const staple = await storage.createPantryStaple(parsed.data);
+    const staple = await storage.createPantryStaple({ ...parsed.data, householdId });
     res.status(201).json(staple);
-    if (req.user) storage.logActivity((req.user as any).id, "pantry_added", null, staple.name);
+    storage.logActivity((req.user as any).id, "pantry_added", null, staple.name);
   });
 
   app.delete("/api/staples/:id", requireAuth, async (req, res) => {
-    await storage.deletePantryStaple(Number(req.params.id));
+    const householdId = (req.user as any).householdId;
+    await storage.deletePantryStaple(Number(req.params.id), householdId);
     res.status(204).send();
   });
 
@@ -770,13 +783,13 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === SHOPPING LIST GENERATOR ===
-  app.post("/api/shopping-list", async (req, res) => {
+  app.post("/api/shopping-list", requireAuth, async (req, res) => {
     const { recipeIds } = req.body as { recipeIds: number[] };
     if (!recipeIds || !Array.isArray(recipeIds)) {
       return res.status(400).json({ error: "recipeIds array required" });
     }
-
-    const staples = await storage.getPantryStaples();
+    const householdId = (req.user as any).householdId;
+    const staples = await storage.getPantryStaples(householdId);
     const stapleNames = new Set(staples.map(s => s.name.toLowerCase()));
 
     // Collect all ingredients from selected recipes
