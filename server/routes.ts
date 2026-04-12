@@ -229,6 +229,7 @@ export async function registerRoutes(server: Server, app: Express) {
   // === RECIPES ===
   app.get("/api/recipes", requireAuth, async (req, res) => {
     const householdId = (req.user as any).householdId;
+    if (!householdId) return res.json([]); // no household yet — return empty rather than crash
     const recipes = await storage.getRecipes(householdId);
     res.json(recipes);
   });
@@ -287,10 +288,17 @@ export async function registerRoutes(server: Server, app: Express) {
   app.get("/api/household", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
     const user = req.user as any;
-    if (!user.householdId) return res.status(404).json({ error: "No household" });
-    const hh = await storage.getHousehold(user.householdId);
+    let householdId = user.householdId;
+    // Auto-assign: if user somehow has no household (migration gap), create one now
+    if (!householdId) {
+      const { generateInviteCode } = await import("./utils/invite");
+      const hh = await storage.createHousehold(`${user.username}'s Home`, generateInviteCode());
+      await storage.setUserHousehold(user.id, hh.id);
+      householdId = hh.id;
+    }
+    const hh = await storage.getHousehold(householdId);
     if (!hh) return res.status(404).json({ error: "Household not found" });
-    const members = await storage.getHouseholdMembers(user.householdId);
+    const members = await storage.getHouseholdMembers(householdId);
     res.json({ ...hh, members: members.map(m => ({ id: m.id, username: m.username })) });
   });
 

@@ -106,25 +106,26 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async init(): Promise<void> {
-    // Auto-migrate: create households table, add household scoping to core tables
+    // Each statement must be a separate pool.query() — node-postgres multi-statement
+    // strings are unreliable (only last result returned, errors may silently skip).
     await pool.query(`
       CREATE TABLE IF NOT EXISTS households (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         invite_code TEXT NOT NULL UNIQUE,
         created_at TIMESTAMP DEFAULT NOW()
-      );
-      INSERT INTO households (id, name, invite_code) VALUES (1, 'Home', 'HOME0001') ON CONFLICT DO NOTHING;
-      SELECT setval('households_id_seq', GREATEST((SELECT MAX(id) FROM households), 1));
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
-      UPDATE users SET household_id = 1 WHERE household_id IS NULL;
-      ALTER TABLE recipes ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
-      UPDATE recipes SET household_id = 1 WHERE household_id IS NULL;
-      ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
-      UPDATE weekly_plans SET household_id = 1 WHERE household_id IS NULL;
-      ALTER TABLE pantry_staples ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id);
-      UPDATE pantry_staples SET household_id = 1 WHERE household_id IS NULL;
+      )
     `);
+    await pool.query(`INSERT INTO households (id, name, invite_code) VALUES (1, 'Home', 'HOME0001') ON CONFLICT DO NOTHING`);
+    await pool.query(`SELECT setval('households_id_seq', GREATEST((SELECT MAX(id) FROM households), 1))`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id)`);
+    await pool.query(`UPDATE users SET household_id = 1 WHERE household_id IS NULL`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id)`);
+    await pool.query(`UPDATE recipes SET household_id = 1 WHERE household_id IS NULL`);
+    await pool.query(`ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id)`);
+    await pool.query(`UPDATE weekly_plans SET household_id = 1 WHERE household_id IS NULL`);
+    await pool.query(`ALTER TABLE pantry_staples ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id)`);
+    await pool.query(`UPDATE pantry_staples SET household_id = 1 WHERE household_id IS NULL`);
   }
 
   // Households
