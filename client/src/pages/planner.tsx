@@ -682,9 +682,14 @@ export default function PlannerPage() {
                 🌅 Breakfast
               </button>
               <WeeklyPlanAI onPlanGenerated={aiMeals => {
-                // Merge: keep manually-placed recipes, fill empty slots with AI picks
+                // Read fresh plan data from cache to avoid stale closure
+                const planData = queryClient.getQueryData<WeeklyPlan>(["/api/plans", weekStart]);
+                const existingMeals: Record<string, MealValue> = planData?.meals
+                  ? (() => { try { return JSON.parse(planData.meals); } catch { return {}; } })()
+                  : {};
+                // AI suggestions fill the base; existing numeric IDs always win
                 const merged: MealsMap = { ...aiMeals };
-                for (const [key, val] of Object.entries(currentMeals)) {
+                for (const [key, val] of Object.entries(existingMeals)) {
                   if (typeof val === "number") (merged as Record<string, MealValue>)[key] = val;
                 }
                 savePlanMutation.mutate({ meals: merged });

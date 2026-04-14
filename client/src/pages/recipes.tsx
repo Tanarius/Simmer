@@ -91,10 +91,6 @@ export default function RecipesPage() {
               data-testid="input-search-recipes"
             />
           </div>
-          <Button size="sm" variant="outline" className="hidden sm:flex gap-1.5 border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30" onClick={() => setCopilotOpen(true)} data-testid="button-find-recipes">
-            <Sparkles className="h-4 w-4" />
-            Find Recipes
-          </Button>
           <Button size="sm" className="hidden sm:flex" onClick={() => setAddDialogOpen(true)} data-testid="button-add-recipe">
             <Plus className="h-4 w-4 mr-1.5" />
             Add Recipe
@@ -116,10 +112,6 @@ export default function RecipesPage() {
               data-testid="input-search-recipes-mobile"
             />
           </div>
-          <Button variant="outline" className="gap-1.5 border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30" onClick={() => setCopilotOpen(true)} data-testid="button-find-recipes-mobile">
-            <Sparkles className="h-4 w-4" />
-            Find Recipes
-          </Button>
           <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-recipe-mobile">
             <Plus className="h-4 w-4 mr-1.5" />
             Add Recipe
@@ -175,6 +167,30 @@ export default function RecipesPage() {
           </div>
         </div>
 
+        {/* Find Recipes banner */}
+        <div
+          className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-xl border border-violet-500/25 bg-gradient-to-r from-violet-500/8 to-indigo-500/8 px-5 py-4 shadow-sm shadow-violet-500/10"
+          data-testid="banner-find-recipes"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 shadow shadow-violet-500/40">
+              <Sparkles className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Discover new recipes</p>
+              <p className="text-xs text-muted-foreground">Search thousands of recipes and save them to your library</p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setCopilotOpen(true)}
+            className="shrink-0 w-full sm:w-auto bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-md shadow-violet-500/30 font-semibold"
+            data-testid="button-find-recipes"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Find Recipes
+          </Button>
+        </div>
+
         {/* Recipe Grid */}
         {isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
@@ -202,14 +218,16 @@ export default function RecipesPage() {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4" data-testid="grid-recipes">
-            {filteredRecipes.map((recipe) => (
-              <RecipeCard
-                key={recipe.id}
-                recipe={recipe}
-                onClick={() => openRecipe(recipe)}
-              />
-            ))}
+          <div className="rounded-xl border border-border bg-card/40 p-3 sm:p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4" data-testid="grid-recipes">
+              {filteredRecipes.map((recipe) => (
+                <RecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  onClick={() => openRecipe(recipe)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
