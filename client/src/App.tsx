@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { CopilotPanel } from "@/components/CopilotPanel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useTheme } from "@/hooks/use-theme";
 import NotFound from "@/pages/not-found";
@@ -88,7 +87,6 @@ function AppLayout() {
             </main>
           </div>
         </div>
-        <CopilotPanel />
       </SidebarProvider>
     </Router>
   );

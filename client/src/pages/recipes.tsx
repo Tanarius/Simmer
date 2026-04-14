@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Plus, Search, ChefHat } from "lucide-react";
+import { Plus, Search, ChefHat, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,6 +9,7 @@ import { AddRecipeDialog } from "@/components/recipe-dialog";
 import type { Recipe } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { CopilotPanel } from "@/components/CopilotPanel";
 
 const CUISINES = ["all", "tex-mex", "italian", "asian", "american", "mediterranean", "indian", "other"];
 const MEAL_TYPES = ["all", "lunch", "dinner", "either"];
@@ -23,6 +24,7 @@ export default function RecipesPage() {
   const [selectedRecipeId, setSelectedRecipeId] = useState<number | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [cuisineFilter, setCuisineFilter] = useState("all");
   const [mealTypeFilter, setMealTypeFilter] = useState("all");
@@ -89,6 +91,10 @@ export default function RecipesPage() {
               data-testid="input-search-recipes"
             />
           </div>
+          <Button size="sm" variant="outline" className="hidden sm:flex gap-1.5 border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30" onClick={() => setCopilotOpen(true)} data-testid="button-find-recipes">
+            <Sparkles className="h-4 w-4" />
+            Find Recipes
+          </Button>
           <Button size="sm" className="hidden sm:flex" onClick={() => setAddDialogOpen(true)} data-testid="button-add-recipe">
             <Plus className="h-4 w-4 mr-1.5" />
             Add Recipe
@@ -110,6 +116,10 @@ export default function RecipesPage() {
               data-testid="input-search-recipes-mobile"
             />
           </div>
+          <Button variant="outline" className="gap-1.5 border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30" onClick={() => setCopilotOpen(true)} data-testid="button-find-recipes-mobile">
+            <Sparkles className="h-4 w-4" />
+            Find Recipes
+          </Button>
           <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-recipe-mobile">
             <Plus className="h-4 w-4 mr-1.5" />
             Add Recipe
@@ -214,6 +224,7 @@ export default function RecipesPage() {
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
       />
+      <CopilotPanel open={copilotOpen} onOpenChange={setCopilotOpen} />
     </div>
   );
 }

@@ -277,8 +277,14 @@ function SectionLabel({ step, children }: { step: number; children: React.ReactN
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
-export function CopilotPanel() {
-  const [open, setOpen] = useState(false);
+interface CopilotPanelProps {
+  open?: boolean;
+  onOpenChange?: (v: boolean) => void;
+}
+
+export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPanelProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const [mealType, setMealType] = useState<string | null>(null);
   const [cuisineChoice, setCuisineChoice] = useState<string | null>(null);
   const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
@@ -385,7 +391,8 @@ export function CopilotPanel() {
   }
 
   function handleClose() {
-    setOpen(false);
+    if (onOpenChange) onOpenChange(false);
+    else setInternalOpen(false);
   }
 
   const currentRecipe = recipes[currentIdx] ?? null;
@@ -394,35 +401,23 @@ export function CopilotPanel() {
 
   return (
     <>
-      {/* Trigger button — hidden when panel is open */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 h-11 rounded-full shadow-xl transition-all text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-violet-500/30"
-          data-testid="button-copilot-toggle"
-        >
-          <Sparkles className="h-4 w-4" />
-          What should I cook?
-        </button>
-      )}
-
       {/* Backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
-          onClick={handleClose}
-        />
-      )}
-
-      {/* Drawer — slides in from right on desktop, up from bottom on mobile */}
       <div
         className={cn(
-          "fixed z-50 flex flex-col bg-background border-border transition-transform duration-300 ease-in-out",
-          // Mobile: bottom sheet
-          "bottom-0 left-0 right-0 rounded-t-2xl border-t max-h-[90vh]",
-          // Desktop: right sidebar drawer
-          "sm:bottom-0 sm:top-0 sm:left-auto sm:right-0 sm:w-[420px] sm:rounded-none sm:rounded-l-2xl sm:border-l sm:border-t-0 sm:max-h-screen",
-          open ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:translate-x-full"
+          "fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] transition-opacity duration-200",
+          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        onClick={handleClose}
+      />
+
+      {/* Centered modal */}
+      <div
+        className={cn(
+          "fixed z-50 flex flex-col bg-background border border-border rounded-2xl shadow-2xl",
+          "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
+          "w-[calc(100vw-2rem)] max-w-lg max-h-[85vh]",
+          "transition-all duration-200 ease-out",
+          open ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
         )}
         data-testid="panel-copilot"
       >
