@@ -104,7 +104,9 @@ app.use((req, res, next) => {
   // Global error handler — never leak stack traces to clients
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = status < 500 ? (err.message || "Bad request") : "Internal server error";
+    const message = status < 500 || status === 503 || status === 429
+      ? (err.message || "Bad request")
+      : "Internal server error";
     if (status >= 500) console.error("Server error:", err);
     if (!res.headersSent) res.status(status).json({ error: message });
   });

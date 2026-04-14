@@ -75,6 +75,11 @@ export interface RecipeTags {
 }
 
 async function executeClaudeCall(system: string, user: string, maxTokens = 1500): Promise<any> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    const e: any = new Error("ANTHROPIC_API_KEY is not configured on the server");
+    e.status = 503;
+    throw e;
+  }
   try {
     const msg = await anthropic.messages.create({
       model: MODEL,
@@ -96,7 +101,20 @@ async function executeClaudeCall(system: string, user: string, maxTokens = 1500)
 
     return JSON.parse(raw);
   } catch (err: any) {
-    console.error("Anthropic Call Error: ", err);
+    console.error("Anthropic Call Error:", err?.status, err?.message, err?.error);
+    // Surface auth/quota errors as non-500 so the client sees a useful message
+    if (err.status === 401) {
+      const e: any = new Error("AI service authentication failed — check ANTHROPIC_API_KEY");
+      e.status = 503;
+      throw e;
+    }
+    if (err.status === 429) {
+      const e: any = new Error("AI rate limit reached — try again later");
+      e.status = 429;
+      throw e;
+    }
+    // Already has a status (our own errors)
+    if (err.status) throw err;
     throw new Error("Failed to process AI response: " + err.message);
   }
 }

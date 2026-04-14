@@ -80,15 +80,15 @@ Rules:
     }
 
     const cleaned: CleanedRecipe = JSON.parse(jsonStr);
-    
+
     // Safety enforcements
     if (!cleaned.sections) cleaned.sections = [];
     if (!cleaned.tips) cleaned.tips = [];
     if (typeof cleaned.difficulty !== 'string') cleaned.difficulty = 'medium';
 
     return cleaned;
-  } catch (error) {
-    console.error("Failed to parse cleaned recipe JSON:", error, "\nRaw Response:", content.text);
-    throw new Error("AI failed to return valid recipe JSON.");
+  } catch (error: any) {
+    console.error("Failed to parse cleaned recipe JSON:", error?.message, "\nRaw Response:", content.text);
+    throw new Error("AI returned invalid JSON: " + (error?.message ?? "parse error"));
   }
 }
