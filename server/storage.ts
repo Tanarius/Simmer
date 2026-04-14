@@ -126,6 +126,35 @@ export class DatabaseStorage implements IStorage {
     await pool.query(`UPDATE weekly_plans SET household_id = 1 WHERE household_id IS NULL`);
     await pool.query(`ALTER TABLE pantry_staples ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id)`);
     await pool.query(`UPDATE pantry_staples SET household_id = 1 WHERE household_id IS NULL`);
+
+    // AI cleaning pipeline columns (added after initial deploy)
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS is_processed BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS raw_instructions TEXT`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS sections JSONB`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cleaned_steps JSONB`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_prep_time INTEGER`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_cook_time INTEGER`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS tips TEXT[]`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine_type TEXT`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS dietary_flags TEXT[] DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS meal_meta TEXT`);
+
+    // Weekly plan meta column
+    await pool.query(`ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS meal_meta TEXT`);
+
+    // Meal reactions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS meal_reactions (
+        id SERIAL PRIMARY KEY,
+        week_start TEXT NOT NULL,
+        slot_key TEXT NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        emoji TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        UNIQUE(week_start, slot_key, user_id)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS meal_reactions_week_idx ON meal_reactions(week_start)`);
   }
 
   // Households

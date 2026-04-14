@@ -132,18 +132,16 @@ onboardingState userId, completed, currentStep, cookingMode, ...
 ### Still Open (prioritize before public launch)
 | # | Issue | Severity | Notes |
 |---|---|---|---|
-| 1 | Sessions lost on server restart | Medium | MemoryStore — fine for dev; needs Redis/DB-backed store for production HA |
-| 2 | No user-scoped data isolation | High | Recipes/plans shared across all households — any user can read/edit any recipe. Need `householdId` filtering on all queries. |
-| 3 | No CSRF protection | Medium | Session cookies without `SameSite` strict or CSRF tokens. Mitigated somewhat by rate limits but not bulletproof. |
-| 4 | No email verification | Low | Users can register with no email — no account recovery |
-| 5 | `SESSION_SECRET` defaults to hardcoded string in dev | Low | Acceptable for local dev; production blocks on missing value |
-| 6 | In-memory AI cache grows unbounded | Low | `server/utils/cache.ts` has no max-size eviction — memory leak under heavy load |
-| 7 | No HTTPS enforcement | Low | Railway handles TLS termination; no HTTP→HTTPS redirect in app itself |
-| 8 | Duplicate ingredients in shopping list | Low | Fuzzy dedup needed ("boneless skinless" vs "boneless, skinless") |
-| 9 | Spoonacular `fillIngredients: true` wastes quota | Low | Costs extra API points on count-only queries |
-| 10 | No audit log for auth events | Low | Login failures, password changes not logged |
+| 1 | No CSRF protection | Medium | Session cookies without `SameSite` strict or CSRF tokens. Mitigated somewhat by rate limits but not bulletproof. |
+| 2 | No email verification | Low | Users can register with no email — no account recovery |
+| 3 | `SESSION_SECRET` defaults to hardcoded string in dev | Low | Acceptable for local dev; production blocks on missing value |
+| 4 | In-memory AI cache grows unbounded | Low | `server/utils/cache.ts` has no max-size eviction — memory leak under heavy load |
+| 5 | No HTTPS enforcement | Low | Railway handles TLS termination; no HTTP→HTTPS redirect in app itself |
+| 6 | Duplicate ingredients in shopping list | Low | Fuzzy dedup needed ("boneless skinless" vs "boneless, skinless") |
+| 7 | Spoonacular `fillIngredients: true` wastes quota | Low | Costs extra API points on count-only queries |
+| 8 | No audit log for auth events | Low | Login failures, password changes not logged |
 
-**Critical for launch**: Items 1 and 2 above. Without household-scoped data, all users see all recipes — this is the biggest functional gap.
+**Critical for launch**: Items 1 above (CSRF). Data isolation and session persistence are now resolved.
 
 ---
 
@@ -187,8 +185,8 @@ onboardingState userId, completed, currentStep, cookingMode, ...
 ## Technical Roadmap
 
 ### Phase 1 — Launch Ready (blockers)
-- [ ] Household-scoped data isolation (recipes, plans, pantry filtered by `householdId`)
-- [ ] Redis/DB-backed session store (MemoryStore lost on restart)
+- [x] Household-scoped data isolation — DONE
+- [x] PostgreSQL session store (connect-pg-simple) — DONE
 - [ ] Premium tier payment (Stripe) — gate the AI calls properly
 - [ ] Email/password reset flow (or "magic link")
 

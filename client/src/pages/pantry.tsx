@@ -22,14 +22,14 @@ const CATEGORIES = [
 type Category = typeof CATEGORIES[number];
 
 const CATEGORY_META: Record<Category, { emoji: string; label: string; bg: string; border: string; chipBg: string; chipText: string }> = {
-  spices:     { emoji: "🌶️", label: "Spices & Herbs",   bg: "bg-red-950/30",    border: "border-red-900/40",    chipBg: "bg-red-900/30",    chipText: "text-red-200" },
-  oils:       { emoji: "🫙",  label: "Oils & Fats",      bg: "bg-yellow-950/30", border: "border-yellow-900/40", chipBg: "bg-yellow-900/30", chipText: "text-yellow-200" },
-  condiments: { emoji: "🥫",  label: "Condiments",       bg: "bg-orange-950/30", border: "border-orange-900/40", chipBg: "bg-orange-900/30", chipText: "text-orange-200" },
-  grains:     { emoji: "🌾",  label: "Grains & Pasta",   bg: "bg-amber-950/30",  border: "border-amber-900/40",  chipBg: "bg-amber-900/30",  chipText: "text-amber-200" },
-  pantry:     { emoji: "🥡",  label: "Pantry Staples",   bg: "bg-stone-900/50",  border: "border-stone-700/40",  chipBg: "bg-stone-800/50",  chipText: "text-stone-300" },
-  dairy:      { emoji: "🧀",  label: "Dairy & Eggs",     bg: "bg-blue-950/30",   border: "border-blue-900/40",   chipBg: "bg-blue-900/30",   chipText: "text-blue-200" },
-  produce:    { emoji: "🥦",  label: "Produce",          bg: "bg-green-950/30",  border: "border-green-900/40",  chipBg: "bg-green-900/30",  chipText: "text-green-200" },
-  other:      { emoji: "📦",  label: "Other",            bg: "bg-purple-950/30", border: "border-purple-900/40", chipBg: "bg-purple-900/30", chipText: "text-purple-200" },
+  spices:     { emoji: "🌶️", label: "Spices & Herbs",   bg: "bg-red-50 dark:bg-red-950/30",       border: "border-red-200 dark:border-red-900/40",       chipBg: "bg-red-100 dark:bg-red-900/30",       chipText: "text-red-700 dark:text-red-200" },
+  oils:       { emoji: "🫙",  label: "Oils & Fats",      bg: "bg-yellow-50 dark:bg-yellow-950/30", border: "border-yellow-200 dark:border-yellow-900/40", chipBg: "bg-yellow-100 dark:bg-yellow-900/30", chipText: "text-yellow-700 dark:text-yellow-200" },
+  condiments: { emoji: "🥫",  label: "Condiments",       bg: "bg-orange-50 dark:bg-orange-950/30", border: "border-orange-200 dark:border-orange-900/40", chipBg: "bg-orange-100 dark:bg-orange-900/30", chipText: "text-orange-700 dark:text-orange-200" },
+  grains:     { emoji: "🌾",  label: "Grains & Pasta",   bg: "bg-amber-50 dark:bg-amber-950/30",   border: "border-amber-200 dark:border-amber-900/40",   chipBg: "bg-amber-100 dark:bg-amber-900/30",   chipText: "text-amber-700 dark:text-amber-200" },
+  pantry:     { emoji: "🥡",  label: "Pantry Staples",   bg: "bg-stone-100 dark:bg-stone-900/50",  border: "border-stone-300 dark:border-stone-700/40",   chipBg: "bg-stone-200 dark:bg-stone-800/50",   chipText: "text-stone-700 dark:text-stone-300" },
+  dairy:      { emoji: "🧀",  label: "Dairy & Eggs",     bg: "bg-blue-50 dark:bg-blue-950/30",     border: "border-blue-200 dark:border-blue-900/40",     chipBg: "bg-blue-100 dark:bg-blue-900/30",     chipText: "text-blue-700 dark:text-blue-200" },
+  produce:    { emoji: "🥦",  label: "Produce",          bg: "bg-green-50 dark:bg-green-950/30",   border: "border-green-200 dark:border-green-900/40",   chipBg: "bg-green-100 dark:bg-green-900/30",   chipText: "text-green-700 dark:text-green-200" },
+  other:      { emoji: "📦",  label: "Other",            bg: "bg-purple-50 dark:bg-purple-950/30", border: "border-purple-200 dark:border-purple-900/40", chipBg: "bg-purple-100 dark:bg-purple-900/30", chipText: "text-purple-700 dark:text-purple-200" },
 };
 
 const SUGGESTIONS: Record<Category, string[]> = {
