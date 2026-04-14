@@ -2,7 +2,7 @@ import { Router } from "express";
 import { aiRateLimit, copilotRateLimit, FREE_TIER_DAILY_LIMIT, TEST_TIER_DAILY_LIMIT, COPILOT_FREE_TIER_DAILY_LIMIT, COPILOT_TEST_TIER_DAILY_LIMIT } from "../middleware/aiRateLimit";
 import {
   suggestRecipesFromPantry,
-  generateWeeklyPlan,
+  selectWeeklyMeals,
   optimizeShoppingList,
   autoTagRecipe
 } from "../services/anthropic";
@@ -358,35 +358,44 @@ router.post("/suggest", async (req, res, next) => {
 router.post("/weekly-plan", async (req, res, next) => {
   try {
     const { schedule } = req.body;
-    const userId = (req.user as any).id;
-
     const householdId = (req.user as any).householdId;
-    const [staples, recentMeals, tasteProfile] = await Promise.all([
-      storage.getPantryStaples(householdId),
+
+    const [recipes, recentMealNames] = await Promise.all([
+      storage.getRecipes(householdId),
       storage.getRecentMealNames(householdId, 14),
-      storage.getUserTasteProfile(userId),
     ]);
 
-    const pantryItems = staples.map(s => s.name);
-
-    // Build household prefs from the user's taste profile
-    const householdPrefs = tasteProfile
-      ? [{ dietary: [], cuisines: tasteProfile.likedCuisines || [], skillLevel: tasteProfile.complexityPreference || 'medium' }]
-      : [];
-
-    const cacheKey = aiCache.generateKey('weekly', { schedule, pantryItems, recentMeals });
-    const cached = aiCache.get<{weeklyPlan: any}>(cacheKey);
-    if (cached) {
-      return res.json({ weeklyPlan: cached.weeklyPlan, callsRemaining: 9999, cached: true });
+    if (recipes.length === 0) {
+      return res.status(400).json({ error: "Add some recipes to your library first, then generate an AI plan." });
     }
 
-    const weeklyPlan = await generateWeeklyPlan(pantryItems, schedule, recentMeals, householdPrefs);
-    aiCache.set(cacheKey, { weeklyPlan }, TTL_24H);
+    // Resolve recent meal names back to IDs so Claude can avoid them
+    const recentMealIds = recentMealNames
+      .map(name => recipes.find(r => r.name === name)?.id)
+      .filter((id): id is number => id !== undefined);
+
+    const recipeList = recipes.map(r => ({
+      id: r.id,
+      name: r.name,
+      cuisine: r.cuisine,
+      mealType: r.mealType,
+      prepTime: r.prepTime,
+      cookTime: r.cookTime,
+    }));
+
+    const cacheKey = aiCache.generateKey('weekly', { schedule, recipeIds: recipeList.map(r => r.id) });
+    const cached = aiCache.get<{ meals: Record<string, number> }>(cacheKey);
+    if (cached) {
+      return res.json({ meals: cached.meals, callsRemaining: 9999, cached: true });
+    }
+
+    const meals = await selectWeeklyMeals(recipeList, schedule, recentMealIds);
+    aiCache.set(cacheKey, { meals }, TTL_24H);
 
     const usage = await storage.getUserAiUsage((req.user as any).id);
     const callsRemaining = getAiCallsRemaining(usage.subscriptionTier, usage.aiCallsToday);
 
-    res.json({ weeklyPlan, callsRemaining });
+    res.json({ meals, callsRemaining });
   } catch (err) {
     next(err);
   }

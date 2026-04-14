@@ -139,11 +139,66 @@ export async function suggestRecipesFromPantry(ingredients: string[], userPrefs:
   return enrichedRecipes.map(res => res.status === "fulfilled" ? res.value : (res as any).reason);
 }
 
-export async function generateWeeklyPlan(pantryItems: string[], userSchedule: DaySchedule[], recentMeals: string[], householdPrefs: UserPrefs[]): Promise<WeeklyPlan> {
-  const systemPrompt = "You are a meal planning assistant for a shared household. Consider ingredient freshness, variety, and the household's combined schedule.";
-  const userPrompt = `Plan 7 days of meals for a shared household. Pantry contents: ${pantryItems.join(", ")}. Weekly schedule by day: ${JSON.stringify(userSchedule)}. Recent meals to avoid repeating: ${recentMeals.join(", ")}. Household dietary preferences combined: ${JSON.stringify(householdPrefs)}. Prioritize using pantry items that expire soonest. Suggest quick meals (under 30 min) on busy days. CRITICAL: If a day has isOffDay=true, output exactly null for all meals on that day (this means the user is eating out). Return ONLY raw JSON: { weekStartDate: string, days: [{ dayOfWeek: string, isBusyDay: boolean, breakfast: MealSlot|null, lunch: MealSlot|null, dinner: MealSlot|null }] } where MealSlot is { recipeName: string, estimatedTime: number, servings: number, keyIngredients: string[] }`;
+const DAY_ABBR: Record<string, string> = {
+  Monday: "mon", Tuesday: "tue", Wednesday: "wed", Thursday: "thu",
+  Friday: "fri", Saturday: "sat", Sunday: "sun",
+};
 
-  return (await executeClaudeCall(systemPrompt, userPrompt, 3000)) as WeeklyPlan;
+export async function selectWeeklyMeals(
+  recipes: { id: number; name: string; cuisine: string; mealType: string; prepTime: number | null; cookTime: number | null }[],
+  schedule: { dayOfWeek: string; isBusyDay: boolean; isOffDay: boolean }[],
+  recentMealIds: number[],
+): Promise<Record<string, number>> {
+  const slots = schedule
+    .filter(d => !d.isOffDay)
+    .flatMap(d => {
+      const abbr = DAY_ABBR[d.dayOfWeek];
+      if (!abbr) return [];
+      return [
+        { key: `${abbr}_lunch`, busy: d.isBusyDay },
+        { key: `${abbr}_dinner`, busy: d.isBusyDay },
+      ];
+    });
+
+  const recipeList = recipes.map(r => ({
+    id: r.id,
+    name: r.name,
+    cuisine: r.cuisine,
+    mealType: r.mealType,
+    totalTime: (r.prepTime ?? 0) + (r.cookTime ?? 0),
+  }));
+
+  const systemPrompt = `You are a meal planning assistant. Select meals ONLY from the provided recipe library — never invent new recipes or names. Always return valid recipe IDs from the list.`;
+
+  const userPrompt = `Select recipes from this library to fill the week's meal plan.
+
+Recipe library:
+${JSON.stringify(recipeList)}
+
+Fill these slots (key: slot name, busy means prefer totalTime ≤ 30):
+${slots.map(s => `${s.key}${s.busy ? " (busy — prefer ≤30 min)" : ""}`).join(", ")}
+
+Rules:
+- ONLY use recipe IDs from the library above — never invent a recipe
+- Vary cuisines and mealTypes throughout the week where possible
+- Try not to repeat the same recipe ID more than twice
+- For busy slots prefer low totalTime; for dinner prefer mealType "dinner" or "either"
+- Avoid these recently used recipe IDs if possible: [${recentMealIds.join(", ")}]
+
+Return ONLY a raw JSON object mapping each slot key to a recipe ID number.
+Example: {"mon_lunch": 3, "mon_dinner": 7, "tue_lunch": 12}`;
+
+  const result = await executeClaudeCall(systemPrompt, userPrompt, 400);
+
+  // Validate — strip any IDs that don't exist in the library
+  const validIds = new Set(recipes.map(r => r.id));
+  const cleaned: Record<string, number> = {};
+  for (const [key, val] of Object.entries(result)) {
+    if (typeof val === "number" && validIds.has(val)) {
+      cleaned[key] = val;
+    }
+  }
+  return cleaned;
 }
 
 export async function optimizeShoppingList(rawItems: string[], pantryItems: string[]): Promise<OptimizedShoppingList> {

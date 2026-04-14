@@ -39,10 +39,10 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
     },
     onSuccess: (data) => {
       setOpen(false);
-      onPlanGenerated(data.weeklyPlan);
+      onPlanGenerated(data.meals);
       toast({
         title: "AI Plan Ready",
-        description: `Generated an optimized plan. ${data.callsRemaining !== 9999 ? `(${data.callsRemaining} AI calls remaining today)` : ''}`,
+        description: `Filled your week from your recipe library. ${data.callsRemaining !== 9999 ? `(${data.callsRemaining} AI calls remaining today)` : ''}`,
       });
     },
     onError: (err: any) => {

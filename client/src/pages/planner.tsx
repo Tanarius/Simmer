@@ -681,7 +681,14 @@ export default function PlannerPage() {
               >
                 🌅 Breakfast
               </button>
-              <WeeklyPlanAI onPlanGenerated={plan => savePlanMutation.mutate({ meals: aiPlanToMealsMap(plan) })} />
+              <WeeklyPlanAI onPlanGenerated={aiMeals => {
+                // Merge: keep manually-placed recipes, fill empty slots with AI picks
+                const merged: MealsMap = { ...aiMeals };
+                for (const [key, val] of Object.entries(currentMeals)) {
+                  if (typeof val === "number") (merged as Record<string, MealValue>)[key] = val;
+                }
+                savePlanMutation.mutate({ meals: merged });
+              }} />
               <Button variant="outline" size="sm" onClick={quickFill}>Quick Fill</Button>
               {recipeIds.length > 0 && (
                 <Button asChild size="sm">
