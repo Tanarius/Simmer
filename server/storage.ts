@@ -68,7 +68,7 @@ export interface IStorage {
   upsertHouseholdTasteProfile(householdId: number, profile: Partial<any>): Promise<void>;
   getAllHouseholdMemberProfiles(householdId: number): Promise<DbUserTasteProfile[]>;
   incrementCuisineSignal(userId: number, cuisineType: string): Promise<void>;
-  getRecentMealNames(limit?: number): Promise<string[]>;
+  getRecentMealNames(householdId: number, limit?: number): Promise<string[]>;
 
   // Copilot Logic
   getCopilotHistory(userId: number, sessionId: string, limit?: number): Promise<any[]>;
@@ -378,9 +378,11 @@ export class DatabaseStorage implements IStorage {
     await db.update(userTasteProfile).set({ cuisineSignals: signals, likedCuisines: liked }).where(eq(userTasteProfile.userId, userId));
   }
 
-  async getRecentMealNames(limit: number = 14): Promise<string[]> {
-    // Get the most recent weekly plans, extract all meal values (recipe IDs or name strings)
-    const plans = await db.select().from(weeklyPlans).orderBy(desc(weeklyPlans.id)).limit(4);
+  async getRecentMealNames(householdId: number, limit: number = 14): Promise<string[]> {
+    // Scoped to the household so we never read another household's recipe names
+    const plans = await db.select().from(weeklyPlans)
+      .where(eq(weeklyPlans.householdId, householdId))
+      .orderBy(desc(weeklyPlans.id)).limit(4);
     const names: string[] = [];
     for (const plan of plans) {
       try {
@@ -390,7 +392,7 @@ export class DatabaseStorage implements IStorage {
           if (typeof val === 'string') {
             if (!names.includes(val)) names.push(val);
           } else if (typeof val === 'number') {
-            const recipe = await this.getRecipe(val);
+            const recipe = await this.getRecipe(val, householdId);
             if (recipe && !names.includes(recipe.name)) names.push(recipe.name);
           }
         }

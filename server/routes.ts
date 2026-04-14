@@ -318,7 +318,7 @@ export async function registerRoutes(server: Server, app: Express) {
     if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
     const user = req.user as any;
     const code = (req.body.inviteCode ?? "").trim().toUpperCase();
-    if (!code) return res.status(400).json({ error: "Invite code required" });
+    if (!code || !/^[A-Z0-9]{8,20}$/.test(code)) return res.status(400).json({ error: "Invalid invite code format" });
     const hh = await storage.getHouseholdByInviteCode(code);
     if (!hh) return res.status(404).json({ error: "Invalid invite code" });
     await storage.setUserHousehold(user.id, hh.id);
@@ -439,8 +439,8 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === MEAL REACTIONS ===
-  app.get("/api/plans/:weekStart/reactions", async (req, res) => {
-    const reactions = await storage.getReactionsForWeek(req.params.weekStart);
+  app.get("/api/plans/:weekStart/reactions", requireAuth, async (req, res) => {
+    const reactions = await storage.getReactionsForWeek(req.params.weekStart as string);
     res.json(reactions);
   });
 
@@ -533,24 +533,6 @@ export async function registerRoutes(server: Server, app: Express) {
       }
     } catch {
       // Google cache failed too
-    }
-
-    // Strategy 3: Try corsproxy.io
-    try {
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-      const res = await fetch(proxyUrl, {
-        headers: { "User-Agent": headers["User-Agent"] },
-        redirect: "follow",
-        signal: AbortSignal.timeout(12000),
-      });
-      if (res.ok) {
-        const html = await res.text();
-        if (html.includes("application/ld+json") || html.includes("recipeIngredient") || html.length > 5000) {
-          return html;
-        }
-      }
-    } catch {
-      // Proxy also failed
     }
 
     throw new Error("Could not reach this recipe site. The site may be blocking automated requests. Try copying the recipe details manually.");

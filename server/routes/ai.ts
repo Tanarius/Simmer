@@ -363,7 +363,7 @@ router.post("/weekly-plan", async (req, res, next) => {
     const householdId = (req.user as any).householdId;
     const [staples, recentMeals, tasteProfile] = await Promise.all([
       storage.getPantryStaples(householdId),
-      storage.getRecentMealNames(14),
+      storage.getRecentMealNames(householdId, 14),
       storage.getUserTasteProfile(userId),
     ]);
 

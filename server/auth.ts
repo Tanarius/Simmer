@@ -45,7 +45,7 @@ export function setupAuth(app: Express) {
   // Setup session
   app.use(
     session({
-      secret: process.env.SESSION_SECRET || "default_secret",
+      secret: process.env.SESSION_SECRET!,
       resave: false,
       saveUninitialized: false,
       cookie: {
