@@ -5,6 +5,8 @@ interface CacheEntry<T> {
   expiry: number;
 }
 
+const MAX_CACHE_ENTRIES = 500;
+
 class InMemCache {
   private store: Map<string, CacheEntry<any>> = new Map();
 
@@ -25,6 +27,11 @@ class InMemCache {
   }
 
   set<T>(key: string, value: T, ttlMs: number): void {
+    // Evict oldest entry when at capacity
+    if (this.store.size >= MAX_CACHE_ENTRIES) {
+      const oldestKey = this.store.keys().next().value;
+      if (oldestKey) this.store.delete(oldestKey);
+    }
     this.store.set(key, { value, expiry: Date.now() + ttlMs });
   }
 

@@ -145,9 +145,10 @@ const DAY_ABBR: Record<string, string> = {
 };
 
 export async function selectWeeklyMeals(
-  recipes: { id: number; name: string; cuisine: string; mealType: string; prepTime: number | null; cookTime: number | null }[],
+  recipes: { id: number; name: string; cuisine: string; mealType: string; prepTime: number | null; cookTime: number | null; tags?: string | null }[],
   schedule: { dayOfWeek: string; isBusyDay: boolean; isOffDay: boolean }[],
   recentMealIds: number[],
+  cookingStyles: string[] = [],
 ): Promise<Record<string, number>> {
   const slots = schedule
     .filter(d => !d.isOffDay)
@@ -160,13 +161,34 @@ export async function selectWeeklyMeals(
       ];
     });
 
-  const recipeList = recipes.map(r => ({
-    id: r.id,
-    name: r.name,
-    cuisine: r.cuisine,
-    mealType: r.mealType,
-    totalTime: (r.prepTime ?? 0) + (r.cookTime ?? 0),
-  }));
+  const recipeList = recipes.map(r => {
+    let parsedTags: string[] = [];
+    try { parsedTags = r.tags ? JSON.parse(r.tags) : []; } catch { /* skip */ }
+    return {
+      id: r.id,
+      name: r.name,
+      cuisine: r.cuisine,
+      mealType: r.mealType,
+      totalTime: (r.prepTime ?? 0) + (r.cookTime ?? 0),
+      tags: parsedTags,
+    };
+  });
+
+  // Build household cooking style rules
+  const styleRules: string[] = [];
+  const isMealPrep = cookingStyles.includes('meal-prep');
+  const isCrockpot = cookingStyles.includes('crockpot');
+  const isQuick = cookingStyles.includes('quick') && !cookingStyles.includes('classic');
+
+  if (isMealPrep) {
+    styleRules.push('This household MEAL PREPS. Schedule the same recipe ID across 3–5 slots — they batch cook and portion it across days. Include at least one recipe repeated 3+ times.');
+  }
+  if (isCrockpot) {
+    styleRules.push('This household uses a crockpot. Prioritise recipes whose tags include "crockpot" or "slow-cook" for non-busy days — these make large portions great for multiple servings.');
+  }
+  if (isQuick) {
+    styleRules.push('This household prefers quick meals. Strongly prefer recipes with low totalTime throughout the week.');
+  }
 
   const systemPrompt = `You are a meal planning assistant. Select meals ONLY from the provided recipe library — never invent new recipes or names. Always return valid recipe IDs from the list.`;
 
@@ -181,9 +203,10 @@ ${slots.map(s => `${s.key}${s.busy ? " (busy — prefer ≤30 min)" : ""}`).join
 Rules:
 - ONLY use recipe IDs from the library above — never invent a recipe
 - Vary cuisines and mealTypes throughout the week where possible
-- Try not to repeat the same recipe ID more than twice
+- ${isMealPrep ? 'ENCOURAGE repeating recipe IDs (meal prep portioning)' : 'Try not to repeat the same recipe ID more than twice'}
 - For busy slots prefer low totalTime; for dinner prefer mealType "dinner" or "either"
 - Avoid these recently used recipe IDs if possible: [${recentMealIds.join(", ")}]
+${styleRules.map(r => `- ${r}`).join('\n')}
 
 Return ONLY a raw JSON object mapping each slot key to a recipe ID number.
 Example: {"mon_lunch": 3, "mon_dinner": 7, "tue_lunch": 12}`;

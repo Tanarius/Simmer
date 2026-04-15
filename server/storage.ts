@@ -127,6 +127,10 @@ export class DatabaseStorage implements IStorage {
     await pool.query(`ALTER TABLE pantry_staples ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id)`);
     await pool.query(`UPDATE pantry_staples SET household_id = 1 WHERE household_id IS NULL`);
 
+    // User preference columns added for onboarding v2
+    await pool.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS cooking_styles TEXT[] DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS household_size INTEGER DEFAULT 2`);
+
     // AI cleaning pipeline columns (added after initial deploy)
     await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS is_processed BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS raw_instructions TEXT`);

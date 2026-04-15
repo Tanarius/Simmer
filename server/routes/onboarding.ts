@@ -76,6 +76,43 @@ router.post("/swipe", async (req, res, next) => {
   }
 });
 
+// New onboarding v2 — saves all preferences in one shot
+router.post("/preferences", async (req, res, next) => {
+  try {
+    const userId = (req.user as any).id;
+    const { householdSize, cookingStyles, cuisines, dietary } = req.body;
+
+    // Ensure onboarding record exists
+    const state = await storage.getOnboardingState(userId);
+    if (!state) await storage.createOnboardingState(userId);
+
+    // Derive complexity from cooking style
+    const complexity = cookingStyles?.includes('quick') ? 'easy'
+      : cookingStyles?.includes('classic') ? 'medium' : 'medium';
+
+    await Promise.all([
+      storage.upsertUserPreferences(userId, {
+        cookingStyles: cookingStyles ?? [],
+        cuisines: cuisines ?? [],
+        dietary: (dietary ?? []).filter((d: string) => d !== 'none'),
+        householdSize: householdSize ?? 2,
+      }),
+      storage.upsertUserTasteProfile(userId, {
+        cookingMode: 'cook',
+        likedCuisines: cuisines ?? [],
+        complexityPreference: complexity,
+        cuisineSignals: Object.fromEntries((cuisines ?? []).map((c: string) => [c, 2])),
+        derivedFrom: 0,
+      }),
+      storage.completeOnboarding(userId),
+    ]);
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/complete", async (req, res, next) => {
   try {
     const userId = (req.user as any).id;

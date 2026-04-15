@@ -79,6 +79,8 @@ export const userPreferences = pgTable('user_preferences', {
   cuisines: text('cuisines').array().default([]),
   skillLevel: text('skill_level').notNull().default('intermediate'),
   maxPrepTime: integer('max_prep_time').notNull().default(60),
+  cookingStyles: text('cooking_styles').array().default([]), // quick, classic, crockpot, meal-prep
+  householdSize: integer('household_size').default(2),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 

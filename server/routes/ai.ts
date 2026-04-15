@@ -137,7 +137,8 @@ router.post("/copilot/execute-tool", async (req, res, next) => {
           const householdIdForPlan = (req.user as any).householdId;
           const weekPlan = await storage.getWeeklyPlan(p.weekStart, householdIdForPlan);
           let meals = weekPlan ? JSON.parse(weekPlan.meals) : {};
-          meals[`${p.dayOfWeek}_${p.mealType}`] = p.recipeName; // naive implementation for demo
+          // Use recipeId (number) so shopping list and recipe cards work correctly
+          meals[`${p.dayOfWeek}_${p.mealType}`] = p.recipeId ?? p.recipeName;
           await storage.upsertWeeklyPlan({
             householdId: householdIdForPlan,
             weekStart: p.weekStart,
@@ -359,22 +360,27 @@ router.post("/suggest", async (req, res, next) => {
 router.post("/weekly-plan", async (req, res, next) => {
   try {
     const { schedule } = req.body;
+    const userId = (req.user as any).id;
     const householdId = (req.user as any).householdId;
 
-    const [recipes, recentMealNames] = await Promise.all([
+    const [recipes, recentMealNames, userPrefs] = await Promise.all([
       storage.getRecipes(householdId),
       storage.getRecentMealNames(householdId, 14),
+      storage.getUserPreferences(userId),
     ]);
 
     if (recipes.length === 0) {
       return res.status(400).json({ error: "Add some recipes to your library first, then generate an AI plan." });
     }
 
+    const cookingStyles: string[] = (userPrefs as any)?.cookingStyles ?? [];
+
     // Resolve recent meal names back to IDs so Claude can avoid them
     const recentMealIds = recentMealNames
       .map(name => recipes.find(r => r.name === name)?.id)
       .filter((id): id is number => id !== undefined);
 
+    // Include tags so Claude can honour crockpot/meal-prep preferences
     const recipeList = recipes.map(r => ({
       id: r.id,
       name: r.name,
@@ -382,15 +388,16 @@ router.post("/weekly-plan", async (req, res, next) => {
       mealType: r.mealType,
       prepTime: r.prepTime,
       cookTime: r.cookTime,
+      tags: r.tags,
     }));
 
-    const cacheKey = aiCache.generateKey('weekly', { schedule, recipeIds: recipeList.map(r => r.id) });
+    const cacheKey = aiCache.generateKey('weekly', { schedule, recipeIds: recipeList.map(r => r.id), cookingStyles });
     const cached = aiCache.get<{ meals: Record<string, number> }>(cacheKey);
     if (cached) {
       return res.json({ meals: cached.meals, callsRemaining: 9999, cached: true });
     }
 
-    const meals = await selectWeeklyMeals(recipeList, schedule, recentMealIds);
+    const meals = await selectWeeklyMeals(recipeList, schedule, recentMealIds, cookingStyles);
     aiCache.set(cacheKey, { meals }, TTL_24H);
 
     const usage = await storage.getUserAiUsage((req.user as any).id);

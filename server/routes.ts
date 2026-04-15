@@ -791,7 +791,7 @@ export async function registerRoutes(server: Server, app: Express) {
     const ingredientMap = new Map<string, { name: string; amounts: string[]; category: string; isStaple: boolean }>();
 
     for (const id of recipeIds) {
-      const recipe = await storage.getRecipe(id);
+      const recipe = await storage.getRecipe(id, householdId);
       if (!recipe) continue;
       
       let ingredients: Array<{ name: string; amount: number; unit: string; category: string }>;

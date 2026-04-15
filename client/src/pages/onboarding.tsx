@@ -1,260 +1,328 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
+import { ChevronRight, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Check, X, ChefHat, Utensils, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-type Dish = {
-  id: number;
-  dishName: string;
-  cuisineType: string;
-  complexity: string;
-  mealType: string;
-  imageUrl: string;
-};
+const HOUSEHOLD_SIZES = [
+  { value: 1, label: "Just Me",       emoji: "🧑‍🍳" },
+  { value: 2, label: "Couple",         emoji: "👫" },
+  { value: 4, label: "Small Family",   emoji: "👨‍👩‍👧",  sub: "3–4 people" },
+  { value: 6, label: "Big Family",     emoji: "👨‍👩‍👧‍👦", sub: "5+ people" },
+];
+
+const COOKING_STYLES = [
+  {
+    value: "quick",
+    label: "Quick & Easy",
+    emoji: "⚡",
+    desc: "Under 30 min. Fast weeknight meals when you don't have much time.",
+  },
+  {
+    value: "classic",
+    label: "Classic Cook",
+    emoji: "🍳",
+    desc: "30–60 min. Cooking fresh most nights with proper meals.",
+  },
+  {
+    value: "crockpot",
+    label: "Crockpot / Slow Cook",
+    emoji: "🫕",
+    desc: "Hands-off cooking. One recipe makes 4–6 portions — we'll spread them across your week automatically.",
+  },
+  {
+    value: "meal-prep",
+    label: "Meal Prep",
+    emoji: "📦",
+    desc: "Batch cook on weekends. One big cook feeds you all week — we'll plan your portions day by day.",
+  },
+];
+
+const CUISINES = [
+  { value: "tex-mex",        label: "Tex-Mex",        emoji: "🌮" },
+  { value: "italian",        label: "Italian",        emoji: "🍝" },
+  { value: "asian",          label: "Asian",          emoji: "🍜" },
+  { value: "american",       label: "American",       emoji: "🍔" },
+  { value: "mediterranean",  label: "Mediterranean",  emoji: "🥙" },
+  { value: "indian",         label: "Indian",         emoji: "🍛" },
+  { value: "other",          label: "Other",          emoji: "🌍" },
+];
+
+const DIETARY = [
+  { value: "none",        label: "No restrictions" },
+  { value: "vegetarian",  label: "Vegetarian" },
+  { value: "vegan",       label: "Vegan" },
+  { value: "gluten-free", label: "Gluten-free" },
+  { value: "dairy-free",  label: "Dairy-free" },
+  { value: "no-pork",     label: "No pork" },
+  { value: "halal",       label: "Halal" },
+];
+
+const TOTAL_STEPS = 4;
 
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [step, setStep] = useState(1);
-  const [dishes, setDishes] = useState<Dish[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const queryClient = useQueryClient();
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
 
-  // Fetch onboarding state to see if they're already done
-  const { data: state, isLoading: stateLoading } = useQuery<any>({
-    queryKey: ["/api/onboarding/state"],
-  });
+  const [householdSize, setHouseholdSize] = useState<number | null>(null);
+  const [cookingStyles, setCookingStyles] = useState<string[]>([]);
+  const [cuisines, setCuisines] = useState<string[]>([]);
+  const [dietary, setDietary] = useState<string[]>([]);
 
-  // Fetch curated dishes
-  const { data: fetchedDishes, isLoading: dishesLoading } = useQuery<Dish[]>({
-    queryKey: ["/api/onboarding/dishes"],
-  });
+  const { data: state, isLoading } = useQuery<any>({ queryKey: ["/api/onboarding/state"] });
 
-  useEffect(() => {
-    if (fetchedDishes && dishes.length === 0) {
-      setDishes(fetchedDishes);
-    }
-  }, [fetchedDishes]);
-
-  useEffect(() => {
-    if (state?.completed) {
-      setLocation("/");
-    }
-  }, [state, setLocation]);
-
-  const selectRole = async (role: 'cook' | 'eater') => {
-    try {
-      await apiRequest("POST", "/api/onboarding/mode", { cookingMode: role });
-      setStep(2);
-    } catch (e) {
-      toast({ description: "Failed to save your role", variant: "destructive" });
-    }
-  };
-
-  const handleSwipe = async (liked: boolean) => {
-    if (currentIndex >= dishes.length) return;
-    
-    const dish = dishes[currentIndex];
-    
-    try {
-      await apiRequest("POST", "/api/onboarding/swipe", {
-        ...dish,
-        liked
-      });
-      
-      setCurrentIndex(prev => prev + 1);
-      
-      if (currentIndex === dishes.length - 1) {
-        // Finished
-        await apiRequest("POST", "/api/onboarding/complete");
-        queryClient.invalidateQueries({ queryKey: ["/api/onboarding/state"] });
-        setLocation("/");
-        toast({ title: "Taste Profile Created! 🎉", description: "Your AI Copilot is now customized to your preferences." });
-      }
-    } catch (err) {
-      toast({ description: "Failed to save swipe", variant: "destructive" });
-    }
-  };
-
-  if (stateLoading || dishesLoading) {
-    return <div className="flex h-screen items-center justify-center bg-zinc-950"><Loader2 className="h-8 w-8 animate-spin text-purple-500" /></div>;
-  }
-
-  if (step === 1) {
+  if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-zinc-950 p-4 font-sans text-zinc-100">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl text-center"
-        >
-          <div className="mx-auto w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center mb-6">
-            <Sparkles className="h-8 w-8 text-purple-500" />
-          </div>
-          <h1 className="text-3xl font-bold mb-3 text-zinc-100">Setup Kitchen Copilot</h1>
-          <p className="text-zinc-400 mb-8 leading-relaxed">
-            I need to learn about your household to give the best suggestions. First, what best describes your primary role?
-          </p>
-          
-          <div className="grid gap-4">
-            <Button
-              variant="outline"
-              className="h-auto p-6 bg-zinc-800/50 border-zinc-700 hover:bg-zinc-800 hover:border-purple-500 flex flex-col items-center gap-3 group transition-all"
-              onClick={() => selectRole('cook')}
-            >
-              <ChefHat className="h-8 w-8 text-zinc-400 group-hover:text-purple-400 transition-colors" />
-              <div>
-                <span className="block text-lg font-semibold text-zinc-200">The Cook</span>
-                <span className="block text-sm text-zinc-500 font-normal">I actively plan and cook the meals</span>
-              </div>
-            </Button>
-
-            <Button
-              variant="outline"
-              className="h-auto p-6 bg-zinc-800/50 border-zinc-700 hover:bg-zinc-800 hover:border-purple-500 flex flex-col items-center gap-3 group transition-all"
-              onClick={() => selectRole('eater')}
-            >
-              <Utensils className="h-8 w-8 text-zinc-400 group-hover:text-purple-400 transition-colors" />
-              <div>
-                <span className="block text-lg font-semibold text-zinc-200">The Eater</span>
-                <span className="block text-sm text-zinc-500 font-normal">I mostly just eat what's made</span>
-              </div>
-            </Button>
-          </div>
-
-          <button
-            className="mt-4 text-sm text-zinc-600 hover:text-zinc-400 transition-colors"
-            onClick={async () => {
-              await apiRequest("POST", "/api/onboarding/complete");
-              queryClient.invalidateQueries({ queryKey: ["/api/onboarding/state"] });
-              setLocation("/");
-            }}
-          >
-            Skip setup →
-          </button>
-        </motion.div>
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-7 w-7 animate-spin text-violet-500" />
       </div>
     );
   }
 
-  // Step 2: Tinder-like swiping
-  const activeDish = dishes[currentIndex];
+  if (state?.completed) {
+    setLocation("/");
+    return null;
+  }
+
+  function toggleCookingStyle(val: string) {
+    setCookingStyles(prev =>
+      prev.includes(val) ? prev.filter(s => s !== val) : [...prev, val]
+    );
+  }
+
+  function toggleCuisine(val: string) {
+    setCuisines(prev =>
+      prev.includes(val) ? prev.filter(c => c !== val) : [...prev, val]
+    );
+  }
+
+  function toggleDietary(val: string) {
+    if (val === "none") { setDietary(["none"]); return; }
+    setDietary(prev => {
+      const without = prev.filter(d => d !== "none");
+      return without.includes(val) ? without.filter(d => d !== val) : [...without, val];
+    });
+  }
+
+  async function finish(skip = false) {
+    setSaving(true);
+    try {
+      await apiRequest("POST", "/api/onboarding/preferences", {
+        householdSize: skip ? 2 : (householdSize ?? 2),
+        cookingStyles: skip ? [] : cookingStyles,
+        cuisines: skip ? [] : cuisines,
+        dietary: skip ? [] : dietary.filter(d => d !== "none"),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/state"] });
+      setLocation("/");
+      if (!skip) {
+        toast({ title: "You're all set!", description: "Preferences saved — the AI will personalise your plan." });
+      }
+    } catch {
+      toast({ description: "Failed to save preferences", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const canNext =
+    (step === 1 && householdSize !== null) ||
+    (step === 2 && cookingStyles.length > 0) ||
+    (step === 3 && cuisines.length > 0) ||
+    step === 4;
+
+  function next() {
+    if (step < TOTAL_STEPS) setStep(s => s + 1);
+    else finish();
+  }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center bg-zinc-950 p-4 font-sans text-zinc-100 overflow-hidden">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-zinc-100 mb-2">Build your Taste Profile</h2>
-        <p className="text-zinc-400">Would your household enjoy this?</p>
-        <div className="text-xs font-mono text-purple-400 mt-2 tracking-wider">
-          {Math.min(currentIndex + 1, dishes.length)} / {dishes.length}
-        </div>
-      </div>
-      
-      <div className="relative w-full max-w-sm aspect-[3/4] flex items-center justify-center perspective-1000">
-        <AnimatePresence>
-          {activeDish && (
-            <DishCard 
-              key={activeDish.id} 
-              dish={activeDish} 
-              onSwipe={(dir) => handleSwipe(dir === 'right')} 
+    <div className="flex h-full items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md">
+
+        {/* Progress bar */}
+        <div className="flex gap-1.5 mb-8">
+          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "h-1.5 flex-1 rounded-full transition-all duration-300",
+                i < step ? "bg-violet-600" : "bg-muted"
+              )}
             />
-          )}
-        </AnimatePresence>
-        
-        {!activeDish && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 rounded-3xl">
-            <Loader2 className="h-10 w-10 animate-spin text-purple-500 mb-4" />
-            <p className="text-zinc-400 font-medium tracking-wide">Finalizing taste profile...</p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-8 mt-12">
-        <Button
-          size="icon"
-          onClick={() => handleSwipe(false)}
-          className="h-16 w-16 rounded-full bg-zinc-900 border-2 border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-xl"
-        >
-          <X className="h-8 w-8" />
-        </Button>
-        <Button
-          size="icon"
-          onClick={() => handleSwipe(true)}
-          className="h-16 w-16 rounded-full bg-zinc-900 border-2 border-green-500/20 text-green-500 hover:bg-green-500 hover:text-white transition-all shadow-xl"
-        >
-          <Check className="h-8 w-8" />
-        </Button>
-      </div>
-
-      <button
-        className="mt-6 text-sm text-zinc-600 hover:text-zinc-400 transition-colors"
-        onClick={async () => {
-          await apiRequest("POST", "/api/onboarding/complete");
-          queryClient.invalidateQueries({ queryKey: ["/api/onboarding/state"] });
-          setLocation("/");
-        }}
-      >
-        Skip →
-      </button>
-    </div>
-  );
-}
-
-function DishCard({ dish, onSwipe }: { dish: Dish, onSwipe: (dir: 'left'|'right') => void }) {
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-10, 10]);
-  const opacity = useTransform(x, [-200, -100, 0, 100, 200], [0, 1, 1, 1, 0]);
-  
-  const likeOpacity = useTransform(x, [0, 100], [0, 1]);
-  const nopeOpacity = useTransform(x, [0, -100], [0, 1]);
-
-  return (
-    <motion.div
-      style={{ x, rotate, opacity }}
-      drag="x"
-      dragConstraints={{ left: 0, right: 0 }}
-      onDragEnd={(e, { offset, velocity }) => {
-        const swipe = offset.x;
-
-        if (swipe > 100) {
-          onSwipe('right');
-        } else if (swipe < -100) {
-          onSwipe('left');
-        }
-      }}
-      initial={{ scale: 0.95, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.95, opacity: 0, transition: { duration: 0.2 } }}
-      className="absolute w-full h-full bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden cursor-grab active:cursor-grabbing origin-bottom"
-    >
-      <img src={dish.imageUrl} alt={dish.dishName} className="absolute inset-0 w-full h-full object-cover" draggable={false} />
-      <div className="absolute inset-0 border-4 border-transparent rounded-3xl pointer-events-none" />
-      
-      {/* Overlay indicators */}
-      <motion.div 
-        style={{ opacity: likeOpacity }} 
-        className="absolute top-8 left-8 border-4 border-green-500 text-green-500 font-bold text-4xl px-4 py-2 rounded-xl uppercase tracking-widest rotate-[-15deg] pointer-events-none"
-      >
-        LIKE
-      </motion.div>
-      <motion.div 
-        style={{ opacity: nopeOpacity }} 
-        className="absolute top-8 right-8 border-4 border-red-500 text-red-500 font-bold text-4xl px-4 py-2 rounded-xl uppercase tracking-widest rotate-[15deg] pointer-events-none"
-      >
-        NOPE
-      </motion.div>
-
-      <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/90 pb-8 via-black/60 to-transparent">
-        <h3 className="text-3xl font-bold text-white mb-2">{dish.dishName}</h3>
-        <div className="flex gap-2 text-sm text-zinc-300 font-medium">
-          <span className="capitalize px-2 py-1 bg-white/20 rounded backdrop-blur-md">{dish.cuisineType}</span>
-          <span className="capitalize px-2 py-1 bg-purple-500/80 rounded backdrop-blur-md text-white">{dish.complexity}</span>
+          ))}
         </div>
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -16 }}
+            transition={{ duration: 0.18 }}
+          >
+
+            {/* Step 1 — Household */}
+            {step === 1 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-2">
+                  Step 1 of {TOTAL_STEPS}
+                </p>
+                <h1 className="text-2xl font-bold mb-1">Who are you cooking for?</h1>
+                <p className="text-sm text-muted-foreground mb-6">Used for default serving sizes</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {HOUSEHOLD_SIZES.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setHouseholdSize(opt.value)}
+                      className={cn(
+                        "flex flex-col items-center gap-2 p-5 rounded-xl border-2 transition-all",
+                        householdSize === opt.value
+                          ? "border-violet-500 bg-violet-500/10"
+                          : "border-border bg-card hover:border-violet-500/40"
+                      )}
+                    >
+                      <span className="text-3xl">{opt.emoji}</span>
+                      <span className="text-sm font-semibold">{opt.label}</span>
+                      {opt.sub && <span className="text-xs text-muted-foreground">{opt.sub}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Step 2 — Cooking style */}
+            {step === 2 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-2">
+                  Step 2 of {TOTAL_STEPS}
+                </p>
+                <h1 className="text-2xl font-bold mb-1">How do you like to cook?</h1>
+                <p className="text-sm text-muted-foreground mb-6">Select all that apply — we'll plan your week around this</p>
+                <div className="space-y-3">
+                  {COOKING_STYLES.map(opt => {
+                    const selected = cookingStyles.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleCookingStyle(opt.value)}
+                        className={cn(
+                          "w-full flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all",
+                          selected
+                            ? "border-violet-500 bg-violet-500/10"
+                            : "border-border bg-card hover:border-violet-500/40"
+                        )}
+                      >
+                        <span className="text-2xl shrink-0 mt-0.5">{opt.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm">{opt.label}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{opt.desc}</p>
+                        </div>
+                        {selected && <Check className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Step 3 — Cuisines */}
+            {step === 3 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-2">
+                  Step 3 of {TOTAL_STEPS}
+                </p>
+                <h1 className="text-2xl font-bold mb-1">What cuisines do you love?</h1>
+                <p className="text-sm text-muted-foreground mb-6">Pick as many as you want</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {CUISINES.map(c => {
+                    const selected = cuisines.includes(c.value);
+                    return (
+                      <button
+                        key={c.value}
+                        onClick={() => toggleCuisine(c.value)}
+                        className={cn(
+                          "flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all",
+                          selected
+                            ? "border-violet-500 bg-violet-500/10"
+                            : "border-border bg-card hover:border-violet-500/40"
+                        )}
+                      >
+                        <span className="text-xl">{c.emoji}</span>
+                        <span className="text-sm font-medium">{c.label}</span>
+                        {selected && <Check className="h-3.5 w-3.5 text-violet-500 ml-auto shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Step 4 — Dietary */}
+            {step === 4 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-2">
+                  Step 4 of {TOTAL_STEPS}
+                </p>
+                <h1 className="text-2xl font-bold mb-1">Any dietary needs?</h1>
+                <p className="text-sm text-muted-foreground mb-6">We'll filter suggestions accordingly</p>
+                <div className="flex flex-wrap gap-2.5">
+                  {DIETARY.map(opt => {
+                    const selected = dietary.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleDietary(opt.value)}
+                        className={cn(
+                          "px-4 py-2.5 rounded-full border-2 text-sm font-medium transition-all",
+                          selected
+                            ? "border-violet-500 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                            : "border-border bg-card hover:border-violet-500/40"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between mt-8">
+          <button
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => finish(true)}
+            disabled={saving}
+          >
+            Skip setup
+          </button>
+          <Button
+            onClick={next}
+            disabled={!canNext || saving}
+            className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white gap-1.5 min-w-[120px]"
+          >
+            {saving ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+            ) : step === TOTAL_STEPS ? (
+              "Get Started"
+            ) : (
+              <>Continue <ChevronRight className="h-4 w-4" /></>
+            )}
+          </Button>
+        </div>
+
       </div>
-    </motion.div>
+    </div>
   );
 }

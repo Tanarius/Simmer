@@ -49,11 +49,8 @@ export default function PantryPage() {
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState<Category>("pantry");
   const [search, setSearch] = useState("");
-  const [quickAddOpen, setQuickAddOpen] = useState(true);
-  const [expandedSuggCategories, setExpandedSuggCategories] = useState<Record<string, boolean>>({
-    spices: true,
-    pantry: true,
-  });
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [expandedSuggCategories, setExpandedSuggCategories] = useState<Record<string, boolean>>({});
 
   const { data: staples, isLoading } = useQuery<PantryStaple[]>({
     queryKey: ["/api/staples"],
@@ -142,8 +139,9 @@ export default function PantryPage() {
               </button>
 
               {quickAddOpen && (
-                <div className="px-4 pb-4 space-y-2 border-t border-border">
-                  <p className="text-xs text-muted-foreground pt-2">Tap a chip to add instantly</p>
+                <div className="px-4 pb-4 border-t border-border">
+                  <p className="text-xs text-muted-foreground pt-2 pb-2">Tap a chip to add instantly</p>
+                  <div className="max-h-60 overflow-y-auto space-y-2 scrollbar-thin">
                   {CATEGORIES.map(cat => {
                     const meta = CATEGORY_META[cat];
                     const available = SUGGESTIONS[cat].filter(s => !addedNames.has(s.toLowerCase()));
@@ -194,6 +192,7 @@ export default function PantryPage() {
                       </div>
                     );
                   })}
+                  </div>{/* end scrollable suggestion list */}
                 </div>
               )}
             </div>

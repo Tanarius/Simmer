@@ -91,10 +91,25 @@ export default function RecipesPage() {
               data-testid="input-search-recipes"
             />
           </div>
-          <Button size="sm" className="hidden sm:flex" onClick={() => setAddDialogOpen(true)} data-testid="button-add-recipe">
-            <Plus className="h-4 w-4 mr-1.5" />
-            Add Recipe
-          </Button>
+          {/* Grouped action buttons with border */}
+          <div className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden divide-x divide-border">
+            <button
+              onClick={() => setCopilotOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors"
+              data-testid="button-find-recipes"
+            >
+              <Sparkles className="h-4 w-4" />
+              Find Recipes
+            </button>
+            <button
+              onClick={() => setAddDialogOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
+              data-testid="button-add-recipe"
+            >
+              <Plus className="h-4 w-4" />
+              Add Recipe
+            </button>
+          </div>
         </div>
       </div>
 
@@ -167,30 +182,6 @@ export default function RecipesPage() {
           </div>
         </div>
 
-        {/* Find Recipes banner */}
-        <div
-          className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-xl border border-violet-500/25 bg-gradient-to-r from-violet-500/8 to-indigo-500/8 px-5 py-4 shadow-sm shadow-violet-500/10"
-          data-testid="banner-find-recipes"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 shadow shadow-violet-500/40">
-              <Sparkles className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Discover new recipes</p>
-              <p className="text-xs text-muted-foreground">Search thousands of recipes and save them to your library</p>
-            </div>
-          </div>
-          <Button
-            onClick={() => setCopilotOpen(true)}
-            className="shrink-0 w-full sm:w-auto bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-md shadow-violet-500/30 font-semibold"
-            data-testid="button-find-recipes"
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            Find Recipes
-          </Button>
-        </div>
-
         {/* Recipe Grid */}
         {isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
@@ -198,22 +189,36 @@ export default function RecipesPage() {
               <Skeleton key={i} className="h-44 rounded-lg" />
             ))}
           </div>
+        ) : recipes?.length === 0 ? (
+          /* Library is empty — guide new users */
+          <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-500/20">
+              <ChefHat className="h-8 w-8 text-violet-400" />
+            </div>
+            <div>
+              <p className="text-base font-semibold">Your recipe library is empty</p>
+              <p className="text-sm text-muted-foreground mt-1">Add recipes manually or let AI find them for you</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => setCopilotOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold hover:from-violet-500 hover:to-indigo-500 shadow-md shadow-violet-500/20 transition-all"
+              >
+                <Sparkles className="h-4 w-4" /> Find Recipes
+              </button>
+              <button
+                onClick={() => setAddDialogOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+              >
+                <Plus className="h-4 w-4" /> Add Manually
+              </button>
+            </div>
+          </div>
         ) : filteredRecipes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <ChefHat className="h-12 w-12 text-muted-foreground/40 mb-4" />
             <p className="text-sm font-medium text-muted-foreground">No recipes match your filters</p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-4"
-              onClick={() => {
-                setSearch("");
-                setCuisineFilter("all");
-                setMealTypeFilter("all");
-                setActiveTagFilters([]);
-                setShowFavoritesOnly(false);
-              }}
-            >
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => { setSearch(""); setCuisineFilter("all"); setMealTypeFilter("all"); setActiveTagFilters([]); setShowFavoritesOnly(false); }}>
               Clear filters
             </Button>
           </div>
