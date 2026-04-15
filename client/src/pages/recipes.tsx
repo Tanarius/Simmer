@@ -232,6 +232,16 @@ export default function RecipesPage() {
         )}
       </div>
 
+      {/* Mobile floating Find Recipes button — hidden on sm+ where the banner is visible */}
+      <button
+        onClick={() => setCopilotOpen(true)}
+        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 h-11 rounded-full shadow-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-violet-500/30 sm:hidden"
+        data-testid="button-find-recipes-float"
+      >
+        <Sparkles className="h-4 w-4" />
+        Find Recipes
+      </button>
+
       {/* Dialogs */}
       <RecipeViewDialog
         recipe={selectedRecipe}

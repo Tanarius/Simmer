@@ -490,11 +490,11 @@ export async function registerRoutes(server: Server, app: Express) {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
-      "Accept-Encoding": "identity",
-      "Cache-Control": "no-cache",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Referer": "https://www.google.com/",
       "Sec-Fetch-Dest": "document",
       "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-Site": "cross-site",
       "Sec-Fetch-User": "?1",
       "Upgrade-Insecure-Requests": "1",
     };
@@ -508,31 +508,36 @@ export async function registerRoutes(server: Server, app: Express) {
       });
       if (res.ok) {
         const html = await res.text();
-        // Verify we got actual HTML and not an error page
-        if (html.includes("application/ld+json") || html.includes("recipeIngredient") || html.length > 5000) {
-          return html;
-        }
-      }
-    } catch {
-      // Direct fetch failed, try proxies
-    }
-
-    // Strategy 2: Google cache
-    try {
-      const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`;
-      const res = await fetch(cacheUrl, {
-        headers: { ...headers, "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" },
-        redirect: "follow",
-        signal: AbortSignal.timeout(10000),
-      });
-      if (res.ok) {
-        const html = await res.text();
         if (html.includes("application/ld+json") || html.includes("recipeIngredient")) {
           return html;
         }
       }
     } catch {
-      // Google cache failed too
+      // Direct fetch failed, try archive
+    }
+
+    // Strategy 2: Internet Archive (Wayback Machine) — works for Cloudflare-protected sites
+    // like AllRecipes that block direct server requests
+    try {
+      const availRes = await fetch(
+        `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (availRes.ok) {
+        const availJson = await availRes.json() as any;
+        const snapshotUrl: string | undefined = availJson?.archived_snapshots?.closest?.url;
+        if (snapshotUrl) {
+          const res = await fetch(snapshotUrl, { headers, redirect: "follow", signal: AbortSignal.timeout(12000) });
+          if (res.ok) {
+            const html = await res.text();
+            if (html.includes("application/ld+json") || html.includes("recipeIngredient")) {
+              return html;
+            }
+          }
+        }
+      }
+    } catch {
+      // Archive fallback failed too
     }
 
     throw new Error("Could not reach this recipe site. The site may be blocking automated requests. Try copying the recipe details manually.");

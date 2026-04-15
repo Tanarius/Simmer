@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Sparkles, X, ChevronLeft, ChevronRight, Check, Plus,
   Loader2, Clock, AlertTriangle, ExternalLink, Users, RefreshCw, Calendar,
@@ -285,6 +285,7 @@ interface CopilotPanelProps {
 export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPanelProps = {}) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [mealType, setMealType] = useState<string | null>(null);
   const [cuisineChoice, setCuisineChoice] = useState<string | null>(null);
   const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
@@ -399,6 +400,13 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
   const hasSaved = savedIds.size > 0;
   const hasResults = recipes.length > 0;
 
+  // Auto-scroll to bottom whenever a new step or result appears
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [mealType, cuisineChoice, selectedVibe, protein, hasResults, searchMutation.isPending]);
+
   return (
     <>
       {/* Backdrop */}
@@ -451,7 +459,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
         </div>
 
         {/* Scrollable content */}
-        <div className="overflow-y-auto flex-1 p-5 space-y-5">
+        <div ref={scrollRef} className="overflow-y-auto flex-1 p-5 space-y-5">
 
           {/* When results are loaded: show compact summary row instead of full question UI */}
           {hasResults ? (

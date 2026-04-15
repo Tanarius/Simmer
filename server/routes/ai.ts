@@ -227,6 +227,7 @@ router.post("/copilot/save-recipe", async (req, res, next) => {
     if (recipe.readyInMinutes >= 240 && !autoTags.includes('crockpot')) { if (!autoTags.includes('slow-cook')) autoTags.push('slow-cook'); }
 
     const saved = await storage.createRecipe({
+      householdId: (req.user as any).householdId,
       name: recipe.title,
       cuisine: cuisineNorm,
       mealType,

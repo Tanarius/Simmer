@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ChefHat, Trash2, ShoppingBasket, CalendarPlus, CalendarCheck, type LucideIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,13 +16,28 @@ interface ActivityGroup {
   latestAt: string;
 }
 
-const ACTION_LABELS: Record<string, (count: number) => string> = {
-  recipe_added:    (n) => `added ${n === 1 ? "a recipe" : `${n} recipes`}`,
-  recipe_deleted:  (n) => `removed ${n === 1 ? "a recipe" : `${n} recipes`}`,
-  pantry_added:    (n) => `added ${n === 1 ? "a pantry item" : `${n} pantry items`}`,
-  plan_meal_added: (n) => `added ${n === 1 ? "a meal" : `${n} meals`} to the plan`,
-  plan_updated:    (_) => "updated the weekly plan",
+const ACTION_META: Record<string, { icon: LucideIcon; color: string; label: (n: number) => string }> = {
+  recipe_added:    { icon: ChefHat,        color: "text-emerald-500", label: (n) => `added ${n === 1 ? "a recipe" : `${n} recipes`}` },
+  recipe_deleted:  { icon: Trash2,         color: "text-red-400",     label: (n) => `removed ${n === 1 ? "a recipe" : `${n} recipes`}` },
+  pantry_added:    { icon: ShoppingBasket, color: "text-blue-400",    label: (n) => `added ${n === 1 ? "a pantry item" : `${n} pantry items`}` },
+  plan_meal_added: { icon: CalendarPlus,   color: "text-violet-400",  label: (n) => `added ${n === 1 ? "a meal" : `${n} meals`} to the plan` },
+  plan_updated:    { icon: CalendarCheck,  color: "text-amber-400",   label: () => "updated the weekly plan" },
 };
+
+const AVATAR_GRADIENTS = [
+  "from-violet-500 to-indigo-500",
+  "from-emerald-500 to-teal-500",
+  "from-amber-500 to-orange-500",
+  "from-pink-500 to-rose-500",
+  "from-blue-500 to-cyan-500",
+  "from-red-500 to-pink-500",
+];
+
+function avatarGradient(username: string): string {
+  let h = 0;
+  for (const c of username) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length];
+}
 
 function RecipeHoverPreview({ recipeId, recipeName }: { recipeId: number; recipeName: string }) {
   const [open, setOpen] = useState(false);
@@ -33,7 +48,7 @@ function RecipeHoverPreview({ recipeId, recipeName }: { recipeId: number; recipe
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <span
-          className="cursor-pointer hover:text-foreground transition-colors underline decoration-dotted underline-offset-2"
+          className="cursor-pointer font-semibold text-foreground hover:text-primary transition-colors underline decoration-dotted underline-offset-2"
           onMouseEnter={() => setOpen(true)}
           onMouseLeave={() => setOpen(false)}
         >
@@ -48,12 +63,11 @@ function RecipeHoverPreview({ recipeId, recipeName }: { recipeId: number; recipe
           onMouseEnter={() => setOpen(true)}
           onMouseLeave={() => setOpen(false)}
         >
-          {/* Image or emoji gradient */}
           <div className="h-24 w-full relative overflow-hidden">
             {recipe.imageUrl ? (
               <img src={recipe.imageUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div className={cn("w-full h-full bg-zinc-900 flex items-center justify-center relative", "overflow-hidden")}>
+              <div className={cn("w-full h-full bg-zinc-900 flex items-center justify-center relative overflow-hidden")}>
                 <div className={cn("absolute inset-0 opacity-20 bg-gradient-to-br", getCuisineGradient(recipe.cuisine))} />
                 <span className="text-4xl relative">{getFoodEmoji(recipe.name, recipe.cuisine)}</span>
               </div>
@@ -90,13 +104,18 @@ export function ActivityFeed() {
 
   return (
     <div className="px-2 py-1">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 px-1.5">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 px-1.5">
         Activity
       </p>
       <div className="space-y-0.5">
         {groups.map((g, i) => {
+          const meta = ACTION_META[g.action];
+          const Icon = meta?.icon ?? ChefHat;
+          const iconColor = meta?.color ?? "text-muted-foreground";
+          const label = meta?.label(g.count) ?? g.action;
           const hasNames = g.recipeNames.length > 0;
           const isExpanded = expanded === i;
+
           return (
             <div key={i}>
               <button
@@ -106,31 +125,46 @@ export function ActivityFeed() {
                   hasNames ? "hover:bg-sidebar-accent cursor-pointer" : "cursor-default"
                 )}
               >
-                <span className="shrink-0 text-[9px] font-bold rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground uppercase leading-tight mt-0.5 min-w-[20px] text-center">
-                  {g.username.slice(0, 2)}
-                </span>
-                <span className="flex-1 text-[11px] text-sidebar-foreground leading-snug">
-                  <span className="font-medium">{g.username}</span>{" "}
-                  <span className="text-muted-foreground">
-                    {ACTION_LABELS[g.action]?.(g.count) ?? g.action}
+                {/* Coloured gradient avatar */}
+                <div
+                  className={cn(
+                    "shrink-0 w-5 h-5 rounded-full bg-gradient-to-br flex items-center justify-center mt-0.5",
+                    avatarGradient(g.username)
+                  )}
+                >
+                  <span className="text-[8px] font-bold text-white leading-none">
+                    {g.username.slice(0, 2).toUpperCase()}
                   </span>
+                </div>
+
+                {/* Action icon */}
+                <Icon className={cn("h-3 w-3 shrink-0 mt-1", iconColor)} />
+
+                {/* Text */}
+                <span className="flex-1 text-[11px] leading-snug">
+                  <span className="font-semibold text-sidebar-foreground">{g.username}</span>{" "}
+                  <span className={cn("font-medium", iconColor)}>{label}</span>
                 </span>
+
+                {/* Timestamp */}
                 <span className="shrink-0 text-[10px] text-muted-foreground whitespace-nowrap leading-tight mt-0.5">
                   {formatDistanceToNow(new Date(g.latestAt), { addSuffix: false })}
                 </span>
+
                 {hasNames && (
                   isExpanded
                     ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground mt-0.5" />
                     : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground mt-0.5" />
                 )}
               </button>
+
               {isExpanded && hasNames && (
-                <ul className="ml-8 mb-0.5 space-y-0.5">
+                <ul className="ml-9 mb-0.5 space-y-0.5">
                   {g.recipeNames.map((name, j) => (
                     <li key={j} className="text-[11px] text-muted-foreground truncate px-1 py-0.5">
                       {g.recipeIds[j]
                         ? <RecipeHoverPreview recipeId={g.recipeIds[j]} recipeName={name} />
-                        : name
+                        : <span className="font-medium text-foreground">{name}</span>
                       }
                     </li>
                   ))}
