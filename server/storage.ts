@@ -37,6 +37,11 @@ export interface IStorage {
   updateHouseholdName(householdId: number, name: string): Promise<void>;
   updateHouseholdInviteCode(householdId: number, inviteCode: string): Promise<void>;
   updateUserPassword(userId: number, hashedPassword: string): Promise<void>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  setUserEmail(userId: number, email: string): Promise<void>;
+  setResetToken(userId: number, token: string, expiry: Date): Promise<void>;
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  clearResetToken(userId: number): Promise<void>;
 
   // Users & AI Limits
   getUser(id: number): Promise<User | undefined>;
@@ -127,6 +132,11 @@ export class DatabaseStorage implements IStorage {
     await pool.query(`ALTER TABLE pantry_staples ADD COLUMN IF NOT EXISTS household_id INTEGER REFERENCES households(id)`);
     await pool.query(`UPDATE pantry_staples SET household_id = 1 WHERE household_id IS NULL`);
 
+    // Email + password reset columns
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT UNIQUE`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP`);
+
     // User preference columns added for onboarding v2
     await pool.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS cooking_styles TEXT[] DEFAULT '{}'`);
     await pool.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS household_size INTEGER DEFAULT 2`);
@@ -195,6 +205,31 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserPassword(userId: number, hashedPassword: string): Promise<void> {
     await db.update(users).set({ password: hashedPassword }).where(eq(users.id, userId));
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const rows = await db.select().from(users).where(eq(users.email, email));
+    return rows[0];
+  }
+
+  async setUserEmail(userId: number, email: string): Promise<void> {
+    await db.update(users).set({ email }).where(eq(users.id, userId));
+  }
+
+  async setResetToken(userId: number, token: string, expiry: Date): Promise<void> {
+    await db.update(users).set({ resetToken: token, resetTokenExpiry: expiry }).where(eq(users.id, userId));
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const rows = await db.select().from(users).where(eq(users.resetToken, token));
+    const user = rows[0];
+    if (!user || !user.resetTokenExpiry) return undefined;
+    if (new Date() > user.resetTokenExpiry) return undefined; // expired
+    return user;
+  }
+
+  async clearResetToken(userId: number): Promise<void> {
+    await db.update(users).set({ resetToken: null, resetTokenExpiry: null }).where(eq(users.id, userId));
   }
 
   // Users & AI Limits

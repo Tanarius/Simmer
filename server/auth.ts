@@ -9,6 +9,8 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
 import { generateInviteCode } from "./utils/invite";
+import { sendPasswordResetEmail } from "./services/email";
+import crypto from "crypto";
 
 // Strict rate limits for auth endpoints
 const authRateLimit = rateLimit({
@@ -134,6 +136,15 @@ export function setupAuth(app: Express) {
       const hashedPassword = await bcrypt.hash(password, 12);
       const user = await storage.createUser({ username, password: hashedPassword });
       await storage.setUserHousehold(user.id, householdId);
+
+      // Save optional email
+      const email = (req.body.email ?? "").trim().toLowerCase();
+      if (email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (emailRegex.test(email)) {
+          await storage.setUserEmail(user.id, email).catch(() => {}); // ignore duplicate
+        }
+      }
       const updatedUser = await storage.getUser(user.id);
 
       req.login(updatedUser!, (err) => {
@@ -178,6 +189,59 @@ export function setupAuth(app: Express) {
       res.json(safeUser(req.user));
     } else {
       res.status(401).send("Not authenticated");
+    }
+  });
+
+  // ── Password reset ──────────────────────────────────────────────
+  const forgotRateLimit = rateLimit({ windowMs: 15 * 60_000, max: 5,
+    message: { error: "Too many requests. Try again later." } });
+
+  app.post("/api/auth/forgot-password", forgotRateLimit, async (req, res, next) => {
+    try {
+      const email = (req.body.email ?? "").trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: "Email required" });
+
+      // Always respond with success to avoid leaking whether email exists
+      const user = await storage.getUserByEmail(email);
+      if (user) {
+        const token = crypto.randomBytes(32).toString("hex");
+        const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+        await storage.setResetToken(user.id, token, expiry);
+        await sendPasswordResetEmail(email, token);
+      }
+      res.json({ success: true });
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res, next) => {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword || newPassword.length < 8)
+        return res.status(400).json({ error: "Token and a password of 8+ characters are required" });
+
+      const user = await storage.getUserByResetToken(token);
+      if (!user) return res.status(400).json({ error: "Reset link is invalid or has expired" });
+
+      const hashed = await bcrypt.hash(newPassword, 12);
+      await storage.updateUserPassword(user.id, hashed);
+      await storage.clearResetToken(user.id);
+      res.json({ success: true });
+    } catch (err) { next(err); }
+  });
+
+  // Update email (authenticated)
+  app.patch("/api/auth/email", async (req, res, next) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const email = (req.body.email ?? "").trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!email || !emailRegex.test(email))
+        return res.status(400).json({ error: "Valid email required" });
+      await storage.setUserEmail((req.user as any).id, email);
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err.code === "23505") return res.status(400).json({ error: "Email already in use" });
+      next(err);
     }
   });
 }

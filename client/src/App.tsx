@@ -18,6 +18,7 @@ import AuthPage from "@/pages/auth-page";
 import JoinPage from "@/pages/join";
 import PricingPage from "@/pages/pricing";
 import OnboardingPage from "@/pages/onboarding";
+import ResetPasswordPage from "@/pages/reset-password";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
@@ -34,8 +35,9 @@ function AppRouter() {
     enabled: !!user && user.status !== 401 && Object.keys(user).length > 0,
   });
 
-  // Join page is always accessible regardless of auth or loading state
+  // These pages are accessible without auth
   if (location.startsWith("/join/")) return <JoinPage />;
+  if (location.startsWith("/reset-password")) return <ResetPasswordPage />;
 
   if (isLoading || (onboardingLoading && user && user.status !== 401 && Object.keys(user).length > 0)) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;

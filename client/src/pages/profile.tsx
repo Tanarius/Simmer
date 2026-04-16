@@ -77,6 +77,50 @@ function Section({
   );
 }
 
+function EmailSection() {
+  const { toast } = useToast();
+  const { data: user } = useQuery<any>({ queryKey: ["/api/user"] });
+  const [emailInput, setEmailInput] = useState("");
+  const [editing, setEditing] = useState(false);
+
+  const emailMutation = useMutation({
+    mutationFn: () => apiRequest("PATCH", "/api/auth/email", { email: emailInput.trim() }).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setEditing(false);
+      toast({ title: "Email saved" });
+    },
+    onError: (e: any) => toast({ title: "Failed to save email", description: e.message, variant: "destructive" }),
+  });
+
+  const current = user?.email;
+
+  return (
+    <div className="mt-5 pt-4 border-t border-border/50 space-y-3">
+      <div>
+        <p className="text-xs font-medium mb-1">Email address</p>
+        <p className="text-[11px] text-muted-foreground">Used for password reset. Optional.</p>
+      </div>
+      {!editing ? (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">{current || <em>Not set</em>}</span>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEmailInput(current || ""); setEditing(true); }}>
+            {current ? "Change" : "Add email"}
+          </Button>
+        </div>
+      ) : (
+        <form className="flex gap-2 max-w-sm" onSubmit={e => { e.preventDefault(); emailMutation.mutate(); }}>
+          <Input type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)} className="h-8 text-sm" required placeholder="you@example.com" autoFocus />
+          <Button size="sm" className="h-8 px-3 text-xs shrink-0" type="submit" disabled={emailMutation.isPending}>
+            {emailMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 px-2 shrink-0" type="button" onClick={() => setEditing(false)}>✕</Button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const { toast } = useToast();
 
@@ -440,11 +484,7 @@ export default function ProfilePage() {
                 </Button>
               </form>
 
-              <div className="mt-5 pt-4 border-t border-border/50">
-                <p className="text-xs text-muted-foreground">
-                  <strong>Coming soon:</strong> Password reset via email, two-factor authentication, and account deletion.
-                </p>
-              </div>
+              <EmailSection />
             </div>
           </Section>
 
