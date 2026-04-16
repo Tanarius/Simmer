@@ -33,14 +33,14 @@ const CATEGORY_META: Record<Category, { emoji: string; label: string; bg: string
 };
 
 const SUGGESTIONS: Record<Category, string[]> = {
-  spices:     ["Salt", "Black pepper", "Garlic powder", "Onion powder", "Paprika", "Cumin", "Chili powder", "Oregano", "Basil", "Thyme", "Rosemary", "Cayenne", "Turmeric", "Cinnamon", "Bay leaves", "Red pepper flakes"],
-  oils:       ["Olive oil", "Vegetable oil", "Coconut oil", "Butter", "Sesame oil", "Avocado oil", "Cooking spray"],
-  condiments: ["Soy sauce", "Hot sauce", "Ketchup", "Mustard", "Worcestershire sauce", "Apple cider vinegar", "White vinegar", "Fish sauce", "Sriracha", "Teriyaki sauce", "Oyster sauce", "Hoisin sauce"],
-  grains:     ["White rice", "Brown rice", "Pasta", "Breadcrumbs", "Oats", "Quinoa", "Flour", "Cornstarch", "Panko", "Couscous", "Lentils"],
-  pantry:     ["Chicken broth", "Beef broth", "Vegetable broth", "Tomato paste", "Diced tomatoes", "Coconut milk", "Black beans", "Chickpeas", "Honey", "Sugar", "Brown sugar", "Baking powder", "Baking soda", "Vanilla extract"],
-  dairy:      ["Eggs", "Parmesan", "Cheddar", "Mozzarella", "Cream cheese", "Sour cream", "Heavy cream", "Milk", "Greek yogurt", "Butter"],
-  produce:    ["Garlic", "Onion", "Shallots", "Ginger", "Lemon", "Lime", "Potatoes"],
-  other:      ["Toothpicks", "Plastic wrap", "Aluminum foil", "Parchment paper"],
+  spices:     ["Salt", "Black pepper", "Garlic powder", "Onion powder", "Paprika", "Smoked paprika", "Cumin", "Chili powder", "Oregano", "Basil", "Thyme", "Rosemary", "Cayenne", "Turmeric", "Cinnamon", "Bay leaves", "Red pepper flakes", "Italian seasoning", "Garam masala", "Curry powder", "Cardamom", "Dried dill", "Mustard powder", "Everything bagel seasoning", "Star anise", "Allspice", "Celery salt", "Dried parsley", "Fennel seeds"],
+  oils:       ["Olive oil", "Vegetable oil", "Coconut oil", "Butter", "Sesame oil", "Avocado oil", "Cooking spray", "Canola oil", "Ghee", "Peanut oil", "White cooking wine", "Red cooking wine"],
+  condiments: ["Soy sauce", "Hot sauce", "Ketchup", "Mustard", "Dijon mustard", "Worcestershire sauce", "Apple cider vinegar", "White vinegar", "Balsamic vinegar", "Rice vinegar", "Red wine vinegar", "Fish sauce", "Sriracha", "Teriyaki sauce", "Oyster sauce", "Hoisin sauce", "Miso paste", "Tahini", "BBQ sauce", "Mayonnaise", "Ranch dressing", "Ponzu sauce", "Sambal oelek"],
+  grains:     ["White rice", "Brown rice", "Pasta", "Breadcrumbs", "Oats", "Quinoa", "Flour", "Cornstarch", "Panko", "Couscous", "Lentils", "Farro", "Polenta", "Almond flour", "Rice noodles", "Egg noodles", "Tortillas", "Pita bread", "Bread flour", "Bulgur", "Barley"],
+  pantry:     ["Chicken broth", "Beef broth", "Vegetable broth", "Tomato paste", "Diced tomatoes", "Crushed tomatoes", "Coconut milk", "Coconut cream", "Black beans", "Chickpeas", "Kidney beans", "Canned corn", "Honey", "Sugar", "Brown sugar", "Baking powder", "Baking soda", "Vanilla extract", "Chipotle peppers", "Mango chutney", "Nutritional yeast", "Anchovies", "Liquid smoke", "Roasted red peppers", "Capers", "Dried cranberries"],
+  dairy:      ["Eggs", "Parmesan", "Cheddar", "Mozzarella", "Cream cheese", "Sour cream", "Heavy cream", "Milk", "Greek yogurt", "Butter", "Feta", "Ricotta", "Cottage cheese", "Goat cheese", "Buttermilk", "Half and half", "Gouda", "Gruyère"],
+  produce:    ["Garlic", "Onion", "Shallots", "Ginger", "Lemon", "Lime", "Potatoes", "Celery", "Carrots", "Bell peppers", "Jalapeño", "Green onions", "Cherry tomatoes", "Mushrooms", "Spinach", "Avocado", "Fresh basil", "Fresh cilantro", "Fresh parsley", "Zucchini", "Broccoli"],
+  other:      ["Toothpicks", "Plastic wrap", "Aluminum foil", "Parchment paper", "Ziplock bags", "Kitchen twine", "Cheesecloth", "Bamboo skewers"],
 };
 
 export default function PantryPage() {

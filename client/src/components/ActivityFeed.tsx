@@ -1,11 +1,21 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { ChevronDown, ChevronRight, ChefHat, Trash2, ShoppingBasket, CalendarPlus, CalendarCheck, type LucideIcon } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getFoodEmoji, getCuisineGradient } from "@/lib/food-emoji";
 import type { Recipe } from "@shared/schema";
+
+function compactTime(iso: string): string {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60)    return "now";
+  if (s < 3600)  return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  if (s < 604800) return `${Math.floor(s / 86400)}d`;
+  return format(new Date(iso), 'MMM d');
+}
 
 interface ActivityGroup {
   username: string;
@@ -41,8 +51,16 @@ function avatarGradient(username: string): string {
 
 function RecipeHoverPreview({ recipeId, recipeName }: { recipeId: number; recipeName: string }) {
   const [open, setOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const { data: recipes } = useQuery<Recipe[]>({ queryKey: ["/api/recipes"], staleTime: Infinity });
   const recipe = recipes?.find(r => r.id === recipeId);
+
+  function handleClick() {
+    // Navigate to recipes page — the page will need to handle opening the recipe
+    // Store the target recipe ID in sessionStorage so recipes page can open it
+    sessionStorage.setItem("openRecipeId", String(recipeId));
+    setLocation("/");
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -51,6 +69,7 @@ function RecipeHoverPreview({ recipeId, recipeName }: { recipeId: number; recipe
           className="cursor-pointer font-semibold text-foreground hover:text-primary transition-colors underline decoration-dotted underline-offset-2"
           onMouseEnter={() => setOpen(true)}
           onMouseLeave={() => setOpen(false)}
+          onClick={handleClick}
         >
           {recipeName}
         </span>
@@ -140,15 +159,15 @@ export function ActivityFeed() {
                 {/* Action icon */}
                 <Icon className={cn("h-3 w-3 shrink-0 mt-1", iconColor)} />
 
-                {/* Text */}
-                <span className="flex-1 text-[11px] leading-snug">
-                  <span className="font-semibold text-sidebar-foreground">{g.username}</span>{" "}
-                  <span className={cn("font-medium", iconColor)}>{label}</span>
+                {/* Text — two lines: username then action */}
+                <span className="flex-1 text-[11px] leading-snug min-w-0">
+                  <span className="font-semibold text-sidebar-foreground block truncate">{g.username}</span>
+                  <span className={cn("font-medium block truncate", iconColor)}>{label}</span>
                 </span>
 
-                {/* Timestamp */}
+                {/* Compact timestamp */}
                 <span className="shrink-0 text-[10px] text-muted-foreground whitespace-nowrap leading-tight mt-0.5">
-                  {formatDistanceToNow(new Date(g.latestAt), { addSuffix: false })}
+                  {compactTime(g.latestAt)}
                 </span>
 
                 {hasNames && (

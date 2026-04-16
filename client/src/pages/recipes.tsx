@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Search, ChefHat, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,16 @@ export default function RecipesPage() {
   const { data: recipes, isLoading } = useQuery<Recipe[]>({
     queryKey: ["/api/recipes"],
   });
+
+  // Open recipe dialog when navigating from activity feed
+  useEffect(() => {
+    const id = sessionStorage.getItem("openRecipeId");
+    if (id) {
+      sessionStorage.removeItem("openRecipeId");
+      setSelectedRecipeId(Number(id));
+      setViewDialogOpen(true);
+    }
+  }, []);
 
   const filteredRecipes = useMemo(() => {
     if (!recipes) return [];
@@ -74,12 +84,12 @@ export default function RecipesPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-border">
-        <div>
+      <div className="flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-border">
+        <div className="shrink-0">
           <h1 className="text-xl font-semibold text-foreground">Recipe Library</h1>
           <p className="text-xs text-muted-foreground mt-0.5">{recipes?.length ?? 0} recipes</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 ml-2">
           <div className="relative hidden sm:block">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -87,29 +97,26 @@ export default function RecipesPage() {
               placeholder="Search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-44 pl-9 bg-background h-9"
+              className="w-40 pl-9 bg-background h-9"
               data-testid="input-search-recipes"
             />
           </div>
-          {/* Grouped action buttons with border */}
-          <div className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden divide-x divide-border">
-            <button
-              onClick={() => setCopilotOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors"
-              data-testid="button-find-recipes"
-            >
-              <Sparkles className="h-4 w-4" />
-              Find Recipes
-            </button>
-            <button
-              onClick={() => setAddDialogOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
-              data-testid="button-add-recipe"
-            >
-              <Plus className="h-4 w-4" />
-              Add Recipe
-            </button>
-          </div>
+          <button
+            onClick={() => setCopilotOpen(true)}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-sm shadow-violet-500/20 transition-all"
+            data-testid="button-find-recipes"
+          >
+            <Sparkles className="h-4 w-4" />
+            Find Recipes
+          </button>
+          <button
+            onClick={() => setAddDialogOpen(true)}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-orange-500 hover:bg-orange-600 text-white shadow-sm shadow-orange-500/20 transition-all"
+            data-testid="button-add-recipe"
+          >
+            <Plus className="h-4 w-4" />
+            Add Recipe
+          </button>
         </div>
       </div>
 

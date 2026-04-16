@@ -52,10 +52,13 @@ const CUISINES = [
 ];
 
 const VIBES = [
-  { label: "Quick & easy",   emoji: "⚡", value: "quick meal" },
-  { label: "Healthy",        emoji: "🥦", value: "healthy" },
-  { label: "Comfort food",   emoji: "🍲", value: "comfort food" },
-  { label: "Something new",  emoji: "🌍", value: "adventurous" },
+  { label: "Quick & easy",   emoji: "⚡",  value: "quick meal" },
+  { label: "Healthy",        emoji: "🥦",  value: "healthy" },
+  { label: "Comfort food",   emoji: "🍲",  value: "comfort food" },
+  { label: "Something new",  emoji: "🌍",  value: "adventurous" },
+  { label: "Crockpot",       emoji: "🫕",  value: "crockpot" },
+  { label: "Air Fryer",      emoji: "🌬️", value: "air fryer" },
+  { label: "Meal Prep",      emoji: "📦",  value: "meal prep" },
 ];
 
 const PROTEINS = [
@@ -143,12 +146,9 @@ function RecipeCard({
         <span className="flex items-center gap-1">
           <Users className="h-3 w-3" />{recipe.servings} servings
         </span>
-        {recipe.diets?.length > 0 && (
-          <>
-            <span>·</span>
-            <span className="capitalize truncate">{recipe.diets[0]}</span>
-          </>
-        )}
+        {recipe.diets?.slice(0, 2).map((d: string) => (
+          <span key={d} className="capitalize px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">{d}</span>
+        ))}
       </div>
 
       {/* Flagged ingredients warning */}

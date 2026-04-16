@@ -1,3 +1,4 @@
+import React from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
@@ -19,8 +20,8 @@ import JoinPage from "@/pages/join";
 import PricingPage from "@/pages/pricing";
 import OnboardingPage from "@/pages/onboarding";
 import ResetPasswordPage from "@/pages/reset-password";
-import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, Link } from "wouter";
 import { Loader2 } from "lucide-react";
 
 function AppRouter() {
@@ -65,6 +66,23 @@ function AppRouter() {
   );
 }
 
+function NoEmailBanner() {
+  const { data: user } = useQuery<any>({ queryKey: ["/api/user"], staleTime: 60_000 });
+  const [dismissed, setDismissed] = React.useState(false);
+  if (!user || user.email || dismissed) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs">
+      <span className="text-amber-700 dark:text-amber-400">
+        ⚠️ Add an email address to enable password reset.
+      </span>
+      <div className="flex items-center gap-2 shrink-0">
+        <Link href="/profile" className="underline text-amber-700 dark:text-amber-400 font-medium">Add email</Link>
+        <button onClick={() => setDismissed(true)} className="text-amber-600 hover:text-amber-800 dark:hover:text-amber-200 ml-1">✕</button>
+      </div>
+    </div>
+  );
+}
+
 function AppLayout() {
   // Initialize theme on mount
   useTheme();
@@ -80,9 +98,12 @@ function AppLayout() {
         <div className="flex h-screen w-full overflow-hidden">
           <AppSidebar />
           <div className="flex flex-col flex-1 min-w-0">
-            <header className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border bg-background shrink-0 h-12">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
-              <ThemeToggle />
+            <header className="flex flex-col shrink-0">
+              <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border bg-background h-12">
+                <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
+                <ThemeToggle />
+              </div>
+              <NoEmailBanner />
             </header>
             <main className="flex-1 overflow-auto">
               <AppRouter />

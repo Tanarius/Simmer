@@ -141,6 +141,8 @@ export default function ProfilePage() {
 
   // ── Queries ──────────────────────────────────────────
   const { data: user } = useQuery<any>({ queryKey: ["/api/user"], staleTime: 60_000 });
+  const { data: allRecipes } = useQuery<any[]>({ queryKey: ["/api/recipes"], staleTime: 60_000 });
+  const { data: userPrefs } = useQuery<any>({ queryKey: ["/api/taste-profile"], staleTime: 60_000 });
 
   const { data: profile, isLoading } = useQuery<any>({
     queryKey: ["/api/taste-profile"],
@@ -231,8 +233,12 @@ export default function ProfilePage() {
               <Avatar name={user?.username ?? "?"} size="lg" />
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold truncate">{user?.username}</h2>
+                {user?.email
+                  ? <p className="text-xs text-muted-foreground mt-0.5 truncate">{user.email}</p>
+                  : <button className="text-xs text-amber-500 mt-0.5 hover:underline" onClick={() => document.getElementById('security-section')?.scrollIntoView({behavior:'smooth'})}>+ Add email for password reset</button>
+                }
                 <span className={cn(
-                  "inline-block text-xs px-2.5 py-0.5 rounded-full font-medium mt-1",
+                  "inline-block text-xs px-2.5 py-0.5 rounded-full font-medium mt-1.5",
                   user?.subscriptionTier === "premium"
                     ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                     : "bg-muted text-muted-foreground border border-border"
@@ -240,6 +246,20 @@ export default function ProfilePage() {
                   {user?.subscriptionTier === "premium" ? "✦ Premium" : "Free plan"}
                 </span>
               </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="flex gap-3 mt-4 flex-wrap">
+              {[
+                { label: "Recipes", value: allRecipes?.length ?? 0 },
+                { label: "Cuisines", value: new Set(allRecipes?.map((r:any) => r.cuisine)).size },
+                { label: "Favorites", value: allRecipes?.filter((r:any) => r.isFavorite).length ?? 0 },
+              ].map(s => (
+                <div key={s.label} className="bg-muted/50 rounded-lg px-3 py-2 text-center min-w-[68px]">
+                  <p className="text-base font-bold">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</p>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -454,10 +474,11 @@ export default function ProfilePage() {
           </Section>
 
           {/* ── Account & Security ───────────────────── */}
+          <div id="security-section">
           <Section
             icon={<Shield className="h-4 w-4 text-green-400" />}
             title="Account & Security"
-            subtitle="Change your password"
+            subtitle="Password, email & security"
             defaultOpen={false}
           >
             <div className="pt-4">
@@ -487,6 +508,7 @@ export default function ProfilePage() {
               <EmailSection />
             </div>
           </Section>
+          </div>
 
           {/* How it works info */}
           <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex gap-3 items-start">

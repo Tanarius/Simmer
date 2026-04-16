@@ -68,6 +68,7 @@ export default function ShoppingPage() {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [aiOptimizedList, setAiOptimizedList] = useState<any>(null);
+  const [scale, setScale] = useState(1);
 
   const weekStart = getMondayOfWeek(new Date()).toISOString().split("T")[0];
   const storageKey = `shopping-checked-${weekStart}`;
@@ -213,11 +214,14 @@ export default function ShoppingPage() {
         </div>
         <div className="flex items-center gap-2">
           {shoppingList && (
-            <ShoppingListOptimizer 
-              currentItems={rawItems} 
-              onOptimized={setAiOptimizedList} 
+            <ShoppingListOptimizer
+              currentItems={rawItems}
+              onOptimized={setAiOptimizedList}
             />
           )}
+          <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print-list">
+            🖨️ Print
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -231,20 +235,9 @@ export default function ShoppingPage() {
         </div>
       </div>
 
-      {/* Recipes included */}
-      {plannedRecipeNames.length > 0 && (
-        <div className="px-6 py-2.5 border-b border-border bg-muted/30">
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <span className="text-xs text-muted-foreground font-medium">From:</span>
-            {plannedRecipeNames.map((name) => (
-              <Badge key={name} variant="secondary" className="text-xs">{name}</Badge>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto px-6 py-5">
+      {/* Content — two column on desktop */}
+      <div className="flex-1 overflow-auto flex flex-col lg:flex-row min-h-0">
+      <div className="flex-1 overflow-auto px-6 py-5 no-print">
         {isLoading ? (
           <div className="space-y-6">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -373,6 +366,61 @@ export default function ShoppingPage() {
             </div>
           </div>
         ) : null}
+      </div>
+
+      {/* Desktop sidebar */}
+      <div className="hidden lg:flex flex-col w-72 shrink-0 border-l border-border bg-card/30 px-5 py-5 gap-5 no-print overflow-y-auto">
+        {/* This week's recipes */}
+        {plannedRecipeNames.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">This week's meals</p>
+            <div className="space-y-2">
+              {plannedRecipeNames.map(name => {
+                const recipe = recipes?.find(r => r.name === name);
+                return (
+                  <div key={name} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border border-border">
+                    <span className="text-lg shrink-0">🍽️</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium truncate">{name}</p>
+                      {recipe && <p className="text-[10px] text-muted-foreground capitalize">{recipe.cuisine} · {(recipe.prepTime ?? 0) + (recipe.cookTime ?? 0)}m</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Servings multiplier */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Scale servings</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {[1, 1.5, 2, 3].map(s => (
+              <button key={s} onClick={() => setScale(s)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm font-medium border transition-all",
+                  scale === s ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:border-primary/50"
+                )}
+              >×{s}</button>
+            ))}
+          </div>
+          {scale !== 1 && <p className="text-[11px] text-muted-foreground mt-2">Amounts shown ×{scale} — adjust quantities when shopping</p>}
+        </div>
+
+        {/* Progress */}
+        {shoppingList && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Progress</p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-bold">{checkedCount}</span>
+              <span className="text-sm text-muted-foreground">/ {totalItems} items</span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+              <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: totalItems ? `${(checkedCount/totalItems)*100}%` : '0%' }} />
+            </div>
+          </div>
+        )}
+      </div>
       </div>
     </div>
   );

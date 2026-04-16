@@ -135,11 +135,14 @@ function mapCuisine(choice: string | undefined): string | undefined {
 
 function mapVibe(vibe: string): { maxReadyTime?: number; sort?: string; minHealthScore?: number } {
   switch (vibe) {
-    case 'quick meal': return { maxReadyTime: 45, sort: 'time' };
-    case 'healthy':    return { sort: 'healthiness', minHealthScore: 40 };
+    case 'quick meal':   return { maxReadyTime: 45, sort: 'time' };
+    case 'healthy':      return { sort: 'healthiness', minHealthScore: 40 };
     case 'comfort food': return { sort: 'popularity' };
-    case 'adventurous': return { sort: 'random' };
-    default:           return { sort: 'popularity' };
+    case 'adventurous':  return { sort: 'random' };
+    case 'crockpot':     return { sort: 'popularity' };
+    case 'air fryer':    return { sort: 'popularity' };
+    case 'meal prep':    return { sort: 'popularity' };
+    default:             return { sort: 'popularity' };
   }
 }
 
@@ -280,6 +283,11 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
   if (cuisine) base.cuisine = cuisine;
   if (avoidedIngredients.length) base.excludeIngredients = avoidedIngredients.slice(0, 5).join(',');
   if (!cuisine && cuisineChoice === 'surprise') base.sort = 'random';
+
+  // Inject cooking-method keywords for crockpot/air-fryer/meal-prep vibes
+  if (params.vibe === 'crockpot')  base.query = ((base.query || '') + ' slow cooker crock pot').trim();
+  if (params.vibe === 'air fryer') base.query = ((base.query || '') + ' air fryer').trim();
+  if (params.vibe === 'meal prep') base.query = ((base.query || '') + ' meal prep batch cooking').trim();
 
   // Sides override: treat protein=sides as a meal type
   const effectiveMealType = protein === 'sides' ? 'sides' : mealType;

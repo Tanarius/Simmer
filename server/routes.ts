@@ -248,6 +248,25 @@ export async function registerRoutes(server: Server, app: Express) {
     const recipe = await storage.createRecipe({ ...parsed.data, householdId });
     res.status(201).json(recipe);
     storage.logActivity((req.user as any).id, "recipe_added", recipe.id, recipe.name);
+    // Auto-clean instructions in background — best-effort, never blocks the response
+    if (!recipe.isProcessed && recipe.instructions) {
+      setImmediate(async () => {
+        try {
+          const { cleanRecipe } = await import('./services/recipeCleaner');
+          let ingredientsParsed: any[] = [];
+          try { ingredientsParsed = JSON.parse(recipe.ingredients); } catch { /* skip */ }
+          const cleaned = await cleanRecipe({ name: recipe.name, ingredients: ingredientsParsed, instructions: recipe.instructions || '' });
+          const flatSteps = cleaned.sections.flatMap((s: any) => s.steps.map((st: any) => st.instruction ?? String(st)));
+          await storage.updateRecipe(recipe.id, householdId, {
+            isProcessed: true, rawInstructions: recipe.instructions,
+            instructions: JSON.stringify(flatSteps), sections: cleaned.sections,
+            cleanedSteps: cleaned.sections.flatMap((s: any) => s.steps),
+            totalPrepTime: cleaned.totalPrepTime, totalCookTime: cleaned.totalCookTime,
+            tips: cleaned.tips, difficulty: cleaned.difficulty,
+          } as any);
+        } catch { /* silent — clean is best-effort */ }
+      });
+    }
   });
 
   app.patch("/api/recipes/:id", requireAuth, async (req, res) => {

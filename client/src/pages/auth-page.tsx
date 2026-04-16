@@ -149,10 +149,9 @@ export default function AuthPage() {
             {mode === "register" && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="email">
-                    Email <span className="text-muted-foreground text-xs">(optional — for password reset)</span>
-                  </Label>
-                  <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" />
+                  <Label htmlFor="email">Email address</Label>
+                  <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required />
+                  <p className="text-[11px] text-muted-foreground">Used for password reset — required</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="invite">Invite code <span className="text-muted-foreground text-xs">(optional)</span></Label>

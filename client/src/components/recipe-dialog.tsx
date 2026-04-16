@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check } from "lucide-react";
+import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import type { Recipe, InsertRecipe } from "@shared/schema";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -124,6 +124,11 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
+
+  // Taste profile for ingredient cross-out
+  const { data: tasteProfile } = useQuery<any>({ queryKey: ["/api/taste-profile"], staleTime: 300_000 });
+  const dislikedIngredients: string[] = tasteProfile?.dislikedIngredients ?? [];
+  const ingredientSubs: Record<string, string | null> = (tasteProfile?.ingredientSubstitutions as any) ?? {};
   const [editName, setEditName] = useState("");
   const [editInstructions, setEditInstructions] = useState("");
   const [scaledServings, setScaledServings] = useState<number | null>(null);
@@ -348,15 +353,30 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
                     {category.label}
                   </p>
                   <ul className="space-y-1">
-                    {items.map((ing, i) => (
-                      <li key={i} className="flex items-center gap-3 text-sm py-1 rounded-lg px-2 hover:bg-muted/40 transition-colors group">
-                        <span className={cn("w-1 h-5 rounded-full shrink-0", category.barClass)} />
-                        <span className="text-foreground flex-1">{ing.name}</span>
-                        <span className="text-muted-foreground tabular-nums text-xs shrink-0">
-                          {formatAmount(ing.amount)}{ing.unit ? ` ${ing.unit}` : ''}
-                        </span>
-                      </li>
-                    ))}
+                    {items.map((ing, i) => {
+                      const lc = ing.name.toLowerCase();
+                      const isDisliked = dislikedIngredients.some(d => d.toLowerCase() === lc);
+                      const substitute = isDisliked ? (ingredientSubs[lc] ?? null) : null;
+                      return (
+                        <li key={i} className="flex items-center gap-3 text-sm py-1 rounded-lg px-2 hover:bg-muted/40 transition-colors group">
+                          <span className={cn("w-1 h-5 rounded-full shrink-0", category.barClass)} />
+                          <span className={cn("flex-1", isDisliked ? "line-through text-muted-foreground/50" : "text-foreground")}>
+                            {ing.name}
+                          </span>
+                          {isDisliked && substitute && (
+                            <span className="text-violet-500 text-xs shrink-0">→ {substitute}</span>
+                          )}
+                          {isDisliked && !substitute && (
+                            <span title="Flagged in your dietary preferences">
+                              <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0" />
+                            </span>
+                          )}
+                          <span className="text-muted-foreground tabular-nums text-xs shrink-0">
+                            {formatAmount(ing.amount)}{ing.unit ? ` ${ing.unit}` : ''}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}

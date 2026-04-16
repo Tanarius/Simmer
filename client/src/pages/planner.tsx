@@ -260,6 +260,9 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
                 {parseTags(recipe.tags).includes("crockpot") && (
                   <span className="text-[10px] px-1.5 py-px rounded-full font-medium bg-amber-500/80 text-white">🥘 Crockpot</span>
                 )}
+                {(parseTags(recipe.tags).includes("crockpot") || parseTags(recipe.tags).includes("slow-cook") || parseTags(recipe.tags).includes("make-ahead")) && (recipe.servings ?? 0) >= 4 && (
+                  <span className="text-[10px] px-1.5 py-px rounded-full font-medium bg-blue-500/70 text-white" title="Makes multiple portions — great for batch cooking">📦 Batch</span>
+                )}
               </div>
             ) : (
               <span className="text-[10px] px-1.5 py-px rounded-full w-fit bg-purple-500/50 text-purple-200 font-medium">AI</span>

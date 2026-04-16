@@ -226,12 +226,13 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
         </Button>
         {/* Add to week button */}
         <AddToWeekButton recipe={recipe} />
-        {/* Crockpot indicator */}
-        {tags.includes("crockpot") && (
-          <span className="absolute top-1.5 left-1.5 bg-black/30 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full">
-            🥘 Crockpot
-          </span>
-        )}
+        {/* Cooking-method badge — most prominent tag shown on image */}
+        {(() => {
+          const methodTag = ["crockpot","slow-cook","air-fryer","grilled","one-pot","one-pan"].find(t => tags.includes(t));
+          if (!methodTag) return null;
+          const meta: Record<string,string> = { crockpot:"🥘 Crockpot", "slow-cook":"🫕 Slow Cook", "air-fryer":"🌬️ Air Fryer", grilled:"🔥 Grilled", "one-pot":"🍲 One Pot", "one-pan":"🍳 One Pan" };
+          return <span className="absolute top-1.5 left-1.5 bg-black/40 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full">{meta[methodTag]}</span>;
+        })()}
       </div>
 
       <CardContent className="p-3.5">
@@ -297,19 +298,31 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
           )}
         </div>
 
-        {/* Tags */}
-        {tags.filter(t => t !== "crockpot").length > 0 && (
+        {/* Tags — color-coded with emoji */}
+        {tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
-            {tags.filter(t => t !== "crockpot").map((tag) => (
-              <Badge
-                key={tag}
-                variant="secondary"
-                className="text-xs px-1.5 py-0 h-5 capitalize"
-                data-testid={`badge-tag-${recipe.id}-${tag}`}
-              >
-                {tag}
-              </Badge>
-            ))}
+            {tags.map((tag) => {
+              const meta: Record<string,{emoji:string;cls:string}> = {
+                crockpot:           {emoji:"🥘",cls:"bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800"},
+                "slow-cook":        {emoji:"🫕",cls:"bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800"},
+                quick:              {emoji:"⚡",cls:"bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-800"},
+                "make-ahead":       {emoji:"📦",cls:"bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800"},
+                "freezer-friendly": {emoji:"❄️",cls:"bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800"},
+                "one-pot":          {emoji:"🍲",cls:"bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800"},
+                "one-pan":          {emoji:"🍳",cls:"bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"},
+                "air-fryer":        {emoji:"🌬️",cls:"bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-800"},
+                grilled:            {emoji:"🔥",cls:"bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-800"},
+              };
+              const t = meta[tag];
+              return (
+                <span key={tag}
+                  className={cn("inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium", t?.cls ?? "bg-muted text-muted-foreground border border-border")}
+                  data-testid={`badge-tag-${recipe.id}-${tag}`}
+                >
+                  {t?.emoji} {tag}
+                </span>
+              );
+            })}
           </div>
         )}
       </CardContent>

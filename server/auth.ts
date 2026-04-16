@@ -137,14 +137,13 @@ export function setupAuth(app: Express) {
       const user = await storage.createUser({ username, password: hashedPassword });
       await storage.setUserHousehold(user.id, householdId);
 
-      // Save optional email
+      // Email is required
       const email = (req.body.email ?? "").trim().toLowerCase();
-      if (email) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (emailRegex.test(email)) {
-          await storage.setUserEmail(user.id, email).catch(() => {}); // ignore duplicate
-        }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!email || !emailRegex.test(email)) {
+        return res.status(400).json({ error: "A valid email address is required" });
       }
+      await storage.setUserEmail(user.id, email).catch(() => {}); // ignore duplicate silently
       const updatedUser = await storage.getUser(user.id);
 
       req.login(updatedUser!, (err) => {
