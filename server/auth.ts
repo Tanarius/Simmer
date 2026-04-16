@@ -139,7 +139,7 @@ export function setupAuth(app: Express) {
 
       // Email is required
       const email = (req.body.email ?? "").trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
       if (!email || !emailRegex.test(email)) {
         return res.status(400).json({ error: "A valid email address is required" });
       }
@@ -233,7 +233,7 @@ export function setupAuth(app: Express) {
     if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
     try {
       const email = (req.body.email ?? "").trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
       if (!email || !emailRegex.test(email))
         return res.status(400).json({ error: "Valid email required" });
       await storage.setUserEmail((req.user as any).id, email);

@@ -163,6 +163,9 @@ function cleanImportedText(text: string): string {
     .trim();
 }
 
+// Semaphore: max concurrent background recipe-clean Anthropic calls
+let autoCleanActive = 0;
+
 export async function registerRoutes(server: Server, app: Express) {
   // Setup Authentication
   setupAuth(app);
@@ -249,7 +252,9 @@ export async function registerRoutes(server: Server, app: Express) {
     res.status(201).json(recipe);
     storage.logActivity((req.user as any).id, "recipe_added", recipe.id, recipe.name);
     // Auto-clean instructions in background — best-effort, never blocks the response
-    if (!recipe.isProcessed && recipe.instructions) {
+    // Rate-limited: max 3 concurrent Anthropic calls to avoid burst costs
+    if (!recipe.isProcessed && recipe.instructions && autoCleanActive < 3) {
+      autoCleanActive++;
       setImmediate(async () => {
         try {
           const { cleanRecipe } = await import('./services/recipeCleaner');
@@ -264,7 +269,11 @@ export async function registerRoutes(server: Server, app: Express) {
             totalPrepTime: cleaned.totalPrepTime, totalCookTime: cleaned.totalCookTime,
             tips: cleaned.tips, difficulty: cleaned.difficulty,
           } as any);
-        } catch { /* silent — clean is best-effort */ }
+        } catch (err) {
+          console.error('[auto-clean] failed for recipe', recipe.id, (err as any)?.message);
+        } finally {
+          autoCleanActive--;
+        }
       });
     }
   });

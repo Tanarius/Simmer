@@ -56,10 +56,18 @@ function RecipeHoverPreview({ recipeId, recipeName }: { recipeId: number; recipe
   const recipe = recipes?.find(r => r.id === recipeId);
 
   function handleClick() {
-    // Navigate to recipes page — the page will need to handle opening the recipe
-    // Store the target recipe ID in sessionStorage so recipes page can open it
-    sessionStorage.setItem("openRecipeId", String(recipeId));
-    setLocation("/");
+    // Validate ID is a safe positive integer before storing
+    const safeId = parseInt(String(recipeId), 10);
+    if (!Number.isFinite(safeId) || safeId <= 0) return;
+
+    if (window.location.hash === "#/" || window.location.hash === "#" || window.location.hash === "") {
+      // Already on recipes page — dispatch custom event for immediate handling
+      window.dispatchEvent(new CustomEvent("openRecipe", { detail: { recipeId: safeId } }));
+    } else {
+      // On a different page — store and navigate; recipes page reads on mount
+      sessionStorage.setItem("openRecipeId", String(safeId));
+      setLocation("/");
+    }
   }
 
   return (

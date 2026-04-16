@@ -169,14 +169,19 @@ export default function ShoppingPage() {
 
   const totalItems = shoppingList?.totalItems ?? 0;
   const checkedCount = checked.size;
+
+  // O(1) lookup map — avoids O(n²) scan in the sidebar
+  const recipeById = useMemo(() => new Map(recipes?.map(r => [r.id, r]) ?? []), [recipes]);
+  const recipeByName = useMemo(() => new Map(recipes?.map(r => [r.name, r]) ?? []), [recipes]);
+
   const plannedRecipeNames = useMemo(() => {
-    if (!recipes || !plan?.meals) return [];
+    if (!plan?.meals) return [];
     try {
       const meals = JSON.parse(plan.meals);
       const ids = Object.values(meals).filter(Boolean) as number[];
-      return [...new Set(ids.map((id) => recipes.find((r) => r.id === id)?.name ?? "Unknown"))];
+      return [...new Set(ids.map((id) => recipeById.get(id)?.name ?? "Unknown"))];
     } catch { return []; }
-  }, [recipes, plan]);
+  }, [recipeById, plan]);
 
   if (recipeIds.length === 0) {
     return (
@@ -376,7 +381,7 @@ export default function ShoppingPage() {
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">This week's meals</p>
             <div className="space-y-2">
               {plannedRecipeNames.map(name => {
-                const recipe = recipes?.find(r => r.name === name);
+                const recipe = recipeByName.get(name);
                 return (
                   <div key={name} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border border-border">
                     <span className="text-lg shrink-0">🍽️</span>
@@ -404,7 +409,7 @@ export default function ShoppingPage() {
               >×{s}</button>
             ))}
           </div>
-          {scale !== 1 && <p className="text-[11px] text-muted-foreground mt-2">Amounts shown ×{scale} — adjust quantities when shopping</p>}
+          {scale !== 1 && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2 font-medium">⚠️ Multiply all amounts by ×{scale} when shopping</p>}
         </div>
 
         {/* Progress */}

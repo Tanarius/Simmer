@@ -35,14 +35,31 @@ export default function RecipesPage() {
     queryKey: ["/api/recipes"],
   });
 
-  // Open recipe dialog when navigating from activity feed
+  // Open recipe dialog when navigating from activity feed (cross-page)
   useEffect(() => {
     const id = sessionStorage.getItem("openRecipeId");
     if (id) {
       sessionStorage.removeItem("openRecipeId");
-      setSelectedRecipeId(Number(id));
-      setViewDialogOpen(true);
+      const safe = parseInt(id, 10);
+      if (Number.isFinite(safe) && safe > 0) {
+        setSelectedRecipeId(safe);
+        setViewDialogOpen(true);
+      }
     }
+  }, []);
+
+  // Open recipe dialog when already on this page (same-page navigation from activity feed)
+  useEffect(() => {
+    function handleOpenRecipe(e: Event) {
+      const { recipeId } = (e as CustomEvent).detail;
+      const safe = parseInt(String(recipeId), 10);
+      if (Number.isFinite(safe) && safe > 0) {
+        setSelectedRecipeId(safe);
+        setViewDialogOpen(true);
+      }
+    }
+    window.addEventListener("openRecipe", handleOpenRecipe);
+    return () => window.removeEventListener("openRecipe", handleOpenRecipe);
   }, []);
 
   const filteredRecipes = useMemo(() => {

@@ -533,7 +533,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
               {cuisineChoice && (
                 <div>
                   <SectionLabel step={3}>What's the vibe?</SectionLabel>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {VIBES.map(v => (
                       <OptionButton
                         key={v.value}
