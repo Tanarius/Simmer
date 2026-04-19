@@ -476,16 +476,17 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/plans/:weekStart/reactions", requireAuth, async (req, res) => {
     const householdId = (req.user as any).householdId;
+    const weekStart = req.params.weekStart as string;
     const { slotKey, emoji } = req.body;
     const userId = (req.user as any).id;
     if (!slotKey) return res.status(400).json({ error: "slotKey required" });
     // Verify the week plan belongs to this household before accepting reactions
-    const plan = await storage.getWeeklyPlan(req.params.weekStart as string, householdId);
+    const plan = await storage.getWeeklyPlan(weekStart, householdId);
     if (!plan) return res.status(403).json({ error: "Forbidden" });
     if (!emoji) {
-      await storage.deleteReaction(req.params.weekStart, slotKey, userId);
+      await storage.deleteReaction(weekStart, slotKey, userId);
     } else {
-      await storage.upsertReaction(req.params.weekStart, slotKey, userId, emoji);
+      await storage.upsertReaction(weekStart, slotKey, userId, emoji);
     }
     res.status(204).send();
   });
