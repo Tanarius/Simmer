@@ -72,13 +72,17 @@ export function setupAuth(app: Express) {
       try {
         const user = await storage.getUserByUsername(username);
         if (!user) return done(null, false, { message: "Invalid username or password" });
-        // Bcrypt-only — plaintext fallback removed for security
+        // One-time migration path: if DB still has a plaintext password from before
+        // bcrypt was enforced, upgrade it now and let the user in. Once every
+        // pre-migration account has logged in this block becomes unreachable.
         if (!user.password?.startsWith('$2b$') && !user.password?.startsWith('$2a$')) {
-          // Legacy plaintext: upgrade on successful login
           if (user.password !== password) return done(null, false, { message: "Invalid username or password" });
           const hashed = await bcrypt.hash(password, 12);
           await storage.updateUserPassword(user.id, hashed);
-          return done(null, user);
+          console.warn(`[auth] upgraded plaintext password for user ${user.id} to bcrypt`);
+          // Reload user so session carries the hashed password, not the plaintext one
+          const upgraded = await storage.getUser(user.id);
+          return done(null, upgraded ?? user);
         }
         const valid = await bcrypt.compare(password, user.password);
         if (!valid) return done(null, false, { message: "Invalid username or password" });
@@ -174,8 +178,11 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ error: "New password must be at least 6 characters" });
       const user = await storage.getUser((req.user as any).id);
       if (!user) return res.status(404).json({ error: "User not found" });
-      const isHash = user.password?.startsWith('$2b$') || user.password?.startsWith('$2a$');
-      const valid = isHash ? await bcrypt.compare(currentPassword, user.password) : user.password === currentPassword;
+      if (!user.password?.startsWith('$2b$') && !user.password?.startsWith('$2a$')) {
+        // Account predates bcrypt migration — user must log out and back in to upgrade first
+        return res.status(400).json({ error: "Please log out and log back in before changing your password." });
+      }
+      const valid = await bcrypt.compare(currentPassword, user.password);
       if (!valid) return res.status(400).json({ error: "Current password is incorrect" });
       const hashed = await bcrypt.hash(newPassword, 12);
       await storage.updateUserPassword(user.id, hashed);

@@ -106,7 +106,7 @@ export interface IStorage {
   // Meal Reactions
   upsertReaction(weekStart: string, slotKey: string, userId: number, emoji: string): Promise<void>;
   deleteReaction(weekStart: string, slotKey: string, userId: number): Promise<void>;
-  getReactionsForWeek(weekStart: string): Promise<MealReaction[]>;
+  getReactionsForWeek(weekStart: string, householdId: number): Promise<MealReaction[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -601,8 +601,15 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
-  async getReactionsForWeek(weekStart: string): Promise<MealReaction[]> {
-    return await db.select().from(mealReactions).where(eq(mealReactions.weekStart, weekStart));
+  async getReactionsForWeek(weekStart: string, householdId: number): Promise<MealReaction[]> {
+    // Only return reactions from members of the same household
+    const householdUsers = await db.select({ id: users.id }).from(users)
+      .where(eq(users.householdId, householdId));
+    const userIds = householdUsers.map(u => u.id);
+    if (userIds.length === 0) return [];
+    return await db.select().from(mealReactions).where(
+      and(eq(mealReactions.weekStart, weekStart), inArray(mealReactions.userId, userIds))
+    );
   }
 }
 

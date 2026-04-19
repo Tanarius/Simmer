@@ -204,9 +204,9 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === DEV UTILITIES ===
+  if (process.env.NODE_ENV !== "production") {
   // Upgrade a user to 'test' tier (50 AI calls/day) — dev only
   app.post("/api/dev/upgrade-testuser", async (req, res) => {
-    if (process.env.NODE_ENV === "production") return res.status(404).send();
 
     try {
       const user = await storage.getUserByUsername("testuser");
@@ -217,6 +217,7 @@ export async function registerRoutes(server: Server, app: Express) {
       res.status(500).json({ error: err.message });
     }
   });
+  } // end dev-only block
 
   // === TASTE PROFILE ===
   app.get("/api/taste-profile", requireAuth, async (req, res) => {
@@ -451,7 +452,7 @@ export async function registerRoutes(server: Server, app: Express) {
       let added = 0;
       for (const val of Object.values(newMeals)) {
         if (typeof val === "number" && !oldVals.has(String(val))) {
-          const recipe = await storage.getRecipe(val);
+          const recipe = await storage.getRecipe(val, householdId);
           storage.logActivity(userId, "plan_meal_added", val, recipe?.name ?? null);
           added++;
         }
@@ -468,15 +469,19 @@ export async function registerRoutes(server: Server, app: Express) {
 
   // === MEAL REACTIONS ===
   app.get("/api/plans/:weekStart/reactions", requireAuth, async (req, res) => {
-    const reactions = await storage.getReactionsForWeek(req.params.weekStart as string);
+    const householdId = (req.user as any).householdId;
+    const reactions = await storage.getReactionsForWeek(req.params.weekStart as string, householdId);
     res.json(reactions);
   });
 
-  app.post("/api/plans/:weekStart/reactions", async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/plans/:weekStart/reactions", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
     const { slotKey, emoji } = req.body;
     const userId = (req.user as any).id;
     if (!slotKey) return res.status(400).json({ error: "slotKey required" });
+    // Verify the week plan belongs to this household before accepting reactions
+    const plan = await storage.getWeeklyPlan(req.params.weekStart as string, householdId);
+    if (!plan) return res.status(403).json({ error: "Forbidden" });
     if (!emoji) {
       await storage.deleteReaction(req.params.weekStart, slotKey, userId);
     } else {
