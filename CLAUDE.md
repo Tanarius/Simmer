@@ -127,9 +127,32 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 ```bash
 npm run dev        # starts Express + Vite HMR on port 5000
 npx tsc --noEmit   # type check (target ES2020 — required for gis regex flag)
+npm test           # run test suite (vitest, no DB/API keys needed)
+npm run test:watch # watch mode during development
 ```
 
 Server changes require a manual restart (tsx doesn't watch by default in this setup). Kill with `npx kill-port 5000`.
+
+---
+
+## Security & Testing Docs
+
+Full living documents — read these before touching auth, routes, or storage:
+
+- **`docs/SECURITY_AUDIT.md`** — every security finding, fix, commit reference, and open item. Update this whenever a security change is made.
+- **`docs/TESTING.md`** — test philosophy, coverage map (what's tested / what's not), and the roadmap for Tier 2–4 tests.
+
+### Security rules (non-negotiable)
+- `householdId` always comes from `req.user.householdId` — never from request body or params.
+- Every route that touches user data must use `requireAuth` middleware, not inline `if (!req.user)` checks.
+- Plaintext password comparison lives ONLY in the login migration path (`server/auth.ts:78`). Do not add it anywhere else.
+- After any security fix, add a test that would have caught the original bug and update `docs/SECURITY_AUDIT.md`.
+
+### Test rules
+- `npm test && npx tsc --noEmit` must both pass before every commit.
+- New test files go in `server/__tests__/` (backend) or `client/src/__tests__/` (frontend).
+- Mock all external services — no real DB, API keys, or network calls in tests.
+- After adding tests, update the coverage map in `docs/TESTING.md`.
 
 ---
 

@@ -6,6 +6,7 @@ import aiRoutes from "./routes/ai";
 import onboardingRoutes from "./routes/onboarding";
 import { requireAuth, isSafeUrl } from "./middleware/requireAuth";
 import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, type InsertWeeklyPlan } from "@shared/schema";
+import { guessCategory, guessCuisine } from "./utils/categorization";
 
 /**
  * Parse an ISO 8601 duration (e.g. PT1H30M, PT45M, PT2H) into minutes.
@@ -22,44 +23,6 @@ function parseDuration(iso: string | undefined | null): number {
 /**
  * Guess a store category from an ingredient name string.
  */
-function guessCategory(name: string): string {
-  const lower = name.toLowerCase();
-  // Protein
-  if (/chicken|beef|pork|sausage|turkey|shrimp|salmon|fish|bacon|steak|lamb|ground meat|ground beef|ground turkey|roast|bouillon|broth|stock/.test(lower)) return "protein";
-  // Dairy
-  if (/cheese|milk|cream|butter|yogurt|egg|sour cream/.test(lower)) return "dairy";
-  // Frozen
-  if (/frozen/.test(lower)) return "frozen";
-  // Bakery
-  if (/bread|rolls|bun|tortilla|naan|pita|hoagie|baguette/.test(lower)) return "bakery";
-  // Grains
-  if (/\brice\b|pasta|noodle|quinoa|\boats\b|farro|couscous|flour|cornstarch|breadcrumb/.test(lower)) return "grains";
-  // Condiments & sauces
-  if (/sauce|vinegar|mustard|ketchup|mayo|sriracha|hot sauce|dressing|salsa|paste|soy sauce|fish sauce|hoisin|teriyaki|worcestershire|oyster sauce/.test(lower)) return "condiments";
-  // Pantry: dried spices, powders, and staples — check BEFORE produce to avoid "garlic powder" → produce
-  if (/powder|dried|flakes|\bsalt\b|pepper\b|paprika|cumin|coriander|oregano|thyme|rosemary|bay leaf|cayenne|chili|turmeric|cinnamon|nutmeg|cloves|allspice|seasoning|spice|herb mix|bouquet|extract|vanilla|baking soda|baking powder|yeast|sugar|brown sugar|honey|syrup|oil|olive oil|vegetable oil|canola|coconut oil|lard|shortening|cornmeal|stock|broth cube|bouillon cube|can |canned|jar |jarred/.test(lower)) return "pantry";
-  // Fresh produce — check after pantry so "garlic powder" doesn't match "garlic" here
-  if (/\bonion\b|fresh garlic|\bgarlic clove|\bpepper\b|bell pepper|tomato|lettuce|avocado|lime|lemon|cilantro|basil|fresh ginger|\bbroccoli\b|carrot|celery|potato|mushroom|spinach|kale|jalap|zucchini|\bcorn\b|cucumber|parsley|green onion|scallion|shallot|leek|fennel|asparagus|artichoke|bok choy|cabbage|beet|radish|turnip|sweet potato|yam|squash|pumpkin/.test(lower)) return "produce";
-  // Default to pantry
-  return "pantry";
-}
-
-/**
- * Guess cuisine from recipe title + ingredient list.
- */
-function guessCuisine(title: string, ingredients: string[]): string {
-  const blob = (title + " " + ingredients.join(" ")).toLowerCase();
-  // Asian first — more specific markers that overlap with other cuisines
-  if (/soy sauce|sesame|teriyaki|stir.?fry|wok|ramen|thai|fish sauce|hoisin|kimchi|miso|pad kra|rice vinegar|bok choy|asian|chinese|japanese|korean|vietnamese|szechuan|kung pao|lo mein|pho|bibimbap|bulgogi|sriracha|lemongrass/.test(blob)) return "asian";
-  // Indian — split from Asian for better distinction
-  if (/tikka|masala|garam|tandoori|naan|basmati|paneer|samosa|curry|chutney|dal|dahl|biryani|turmeric|cumin|coriander seed|cardamom|indian/.test(blob)) return "indian";
-  if (/taco|enchilada|burrito|salsa|tortilla|quesadilla|fajita|carnitas|chipotle|jalap|tex.?mex|mexican|chile verde|tamale|queso/.test(blob)) return "tex-mex";
-  if (/pasta|marinara|parmesan|mozzarella|italian|risotto|penne|fettuccine|lasagna|alfredo|prosciutto|bruschetta|bolognese|carbonara|pesto|gnocchi|ravioli|ciabatta/.test(blob)) return "italian";
-  if (/hummus|falafel|tahini|shawarma|gyro|tzatziki|pita|greek|mediterranean|moroccan|feta|olives|couscous|harissa|za'atar|sumac|kebab|turkish|lebanese/.test(blob)) return "mediterranean";
-  if (/bbq|barbecue|biscuit|gravy|pot roast|corn bread|soul food|southern|cajun|creole|gumbo|jambalaya|mac.?and.?cheese|burger|meatloaf|chili|american|tater tot|casserole|chicken and dump|pulled pork|sloppy joe|wild rice|pot pie|clam chowder|yankee|buffalo wing/.test(blob)) return "american";
-  return "other";
-}
-
 /**
  * Parse a raw ingredient string like "2 cups all-purpose flour" into structured parts.
  */
