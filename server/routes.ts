@@ -7,6 +7,8 @@ import onboardingRoutes from "./routes/onboarding";
 import { requireAuth, isSafeUrl } from "./middleware/requireAuth";
 import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, type InsertWeeklyPlan } from "@shared/schema";
 import { guessCategory, guessCuisine } from "./utils/categorization";
+import { detectTags } from "./utils/autoTag";
+import { buildShoppingList } from "./utils/shoppingList";
 
 /**
  * Parse an ISO 8601 duration (e.g. PT1H30M, PT45M, PT2H) into minutes.
@@ -728,16 +730,7 @@ export async function registerRoutes(server: Server, app: Express) {
       const cuisine = guessCuisine(name, rawIngredients);
 
       // Guess tags
-      const tags: string[] = [];
-      const lowerName = name.toLowerCase();
-      const totalMin = prepTime + cookTime;
-      if (/crock.?pot|slow.?cook/.test(lowerName)) tags.push("crockpot");
-      if (/instant.?pot|pressure.?cook/.test(lowerName)) { tags.push("quick"); tags.push("one-pot"); }
-      if (/air.?fry/.test(lowerName)) tags.push("quick");
-      if (/grill|bbq|barbecue/.test(lowerName)) tags.push("grilled");
-      if (totalMin > 0 && totalMin <= 30 && !tags.includes("quick")) tags.push("quick");
-      if (totalMin >= 240 && !tags.includes("crockpot")) tags.push("slow-cook");
-      if (/one.?pot|one.?pan|sheet.?pan/.test(lowerName)) tags.push("one-pot");
+      const tags = detectTags(name, prepTime + cookTime);
 
       // Extract image URL from JSON-LD
       let imageUrl: string | null = null;
@@ -785,67 +778,20 @@ export async function registerRoutes(server: Server, app: Express) {
     const stapleNames = new Set(staples.map(s => s.name.toLowerCase()));
 
     // Collect all ingredients from selected recipes
-    const ingredientMap = new Map<string, { name: string; amounts: string[]; category: string; isStaple: boolean }>();
-
+    const allIngredients: Array<{ name: string; amount: number; unit: string }> = [];
     for (const id of recipeIds) {
       const recipe = await storage.getRecipe(id, householdId);
       if (!recipe) continue;
-      
-      let ingredients: Array<{ name: string; amount: number; unit: string; category: string }>;
       try {
-        ingredients = recipe.ingredients ? JSON.parse(recipe.ingredients) : [];
+        const parsed: Array<{ name: string; amount: number; unit: string }> =
+          recipe.ingredients ? JSON.parse(recipe.ingredients) : [];
+        allIngredients.push(...parsed);
       } catch {
         console.warn(`Skipping recipe ${recipe.id}: malformed ingredients JSON`);
-        continue;
-      }
-
-      for (const ing of ingredients) {
-        const key = ing.name.toLowerCase();
-        const amountStr = `${ing.amount} ${ing.unit}`;
-        const isStaple = stapleNames.has(key);
-        // Always re-derive category from name so improvements to guessCategory take effect
-        const category = guessCategory(ing.name);
-
-        if (ingredientMap.has(key)) {
-          ingredientMap.get(key)!.amounts.push(amountStr);
-        } else {
-          ingredientMap.set(key, {
-            name: ing.name,
-            amounts: [amountStr],
-            category,
-            isStaple,
-          });
-        }
       }
     }
 
-    // Group by category
-    const grouped: Record<string, Array<{ name: string; amounts: string[]; isStaple: boolean }>> = {};
-    for (const [, item] of ingredientMap) {
-      const cat = item.category;
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push({ name: item.name, amounts: item.amounts, isStaple: item.isStaple });
-    }
-
-    // Sort categories in a logical shopping order
-    const categoryOrder = ["produce", "protein", "dairy", "frozen", "bakery", "pantry", "grains", "condiments"];
-    const sortedGroups: Record<string, typeof grouped[string]> = {};
-    for (const cat of categoryOrder) {
-      if (grouped[cat]) {
-        sortedGroups[cat] = grouped[cat].sort((a, b) => a.name.localeCompare(b.name));
-      }
-    }
-    // Add any remaining categories
-    for (const cat of Object.keys(grouped)) {
-      if (!sortedGroups[cat]) {
-        sortedGroups[cat] = grouped[cat].sort((a, b) => a.name.localeCompare(b.name));
-      }
-    }
-
-    res.json({
-      totalItems: ingredientMap.size,
-      recipeCount: recipeIds.length,
-      categories: sortedGroups,
-    });
+    const { totalItems, categories } = buildShoppingList(allIngredients, stapleNames);
+    res.json({ totalItems, recipeCount: recipeIds.length, categories });
   });
 }

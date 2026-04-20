@@ -57,24 +57,22 @@ npx tsc --noEmit    # type check (run before every commit)
 | `server/routes.ts` (household endpoints) | `server/__tests__/auth-guards.test.ts` | All household mutation routes return 401 without session |
 | `server/routes.ts` (data isolation) | `server/__tests__/household-isolation.test.ts` | Recipe queries scoped to householdId; plan queries scoped; reactions scoped to household members; cross-household recipe ID returns 404 |
 | `server/routes.ts` (`guessCategory`) | `server/__tests__/guess-category.test.ts` | All 8 categories; pantry-before-produce ordering; "garlic powder" → pantry not produce; default fallback |
+| `server/utils/autoTag.ts` | `server/__tests__/auto-tag.test.ts` | Title keyword detection (crockpot, instant pot, air fryer, grill, one-pot, sheet pan); time-based quick/slow-cook; existingTags deduplication; premium tag preservation |
+| `server/utils/shoppingList.ts` | `server/__tests__/shopping-list.test.ts` | Ingredient deduplication (case-insensitive); amount aggregation; category derivation via guessCategory; staple flagging; CATEGORY_ORDER sort; alpha sort within category |
+| `server/middleware/aiRateLimit.ts` | `server/__tests__/rate-limits.test.ts` | Unauthenticated → 401; free tier at limit → 429 with upgradePrompt; test tier uses TEST limit; premium bypasses; storage error → 500; copilotRateLimit same model |
+| `server/routes/ai.ts` (copilot ownership) | `server/__tests__/copilot-auth.test.ts` | getCopilotHistory called with req.user.id not URL-supplied id; updateProposedActionStatus receives correct userId+sessionId (SEC-011) |
 
 ### ⚠️ Partially Covered
 
 | Area | Gap | Priority |
 |------|-----|----------|
-| `server/routes/ai.ts` | AI routes have auth (router-level middleware) but no coverage for rate limiting logic or response shape | Medium |
 | `server/auth.ts` | Password reset flow (forgot/reset token) not tested | Medium |
-| `server/routes.ts` | Shopping list generation logic (ingredient aggregation, dedup, category grouping) | High |
 
 ### ❌ Not Yet Covered
 
 | Area | Planned Test File | Priority | Notes |
 |------|-------------------|----------|-------|
-| Shopping list generation | `server/__tests__/shopping-list.test.ts` | High | Pure logic, easy to unit test |
 | `guessCuisine()` | `server/__tests__/guess-cuisine.test.ts` | Medium | Pure function |
-| Auto-tag detection | `server/__tests__/auto-tag.test.ts` | Medium | Pure function |
-| Copilot session ownership | `server/__tests__/copilot-auth.test.ts` | High | SEC-011 gap |
-| AI rate limiting | `server/__tests__/rate-limits.test.ts` | Medium | Per-tier limits |
 | Full recipe CRUD flow | `server/__tests__/recipes.integration.test.ts` | Medium | Needs test DB |
 | Weekly planner flow | `server/__tests__/planner.integration.test.ts` | Medium | Needs test DB |
 | Frontend components | `client/src/__tests__/` | Low | Needs Playwright/RTL setup |
@@ -90,12 +88,12 @@ Proves the security model holds. Must pass before any deployment.
 - Household data isolation
 - `guessCategory` (core shopping list logic)
 
-### Tier 2 — Business Logic *(next)*
+### Tier 2 — Business Logic *(done)*
 Proves the core user-facing features produce correct output.
-- Shopping list generation
-- `guessCuisine` + auto-tag
-- Copilot session scoping
-- AI rate limit enforcement
+- Shopping list generation (`buildShoppingList`)
+- Auto-tag detection (`detectTags`)
+- Copilot session ownership (SEC-011)
+- AI rate limit enforcement (free / test / premium tiers)
 
 ### Tier 3 — Integration *(post-launch)*
 End-to-end flows against a real test database schema.

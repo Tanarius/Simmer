@@ -460,7 +460,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateProposedActionStatus(userId: number, sessionId: string, messageId: number, status: 'applied' | 'dismissed'): Promise<void> {
-    const rows = await db.select().from(copilotSessions).where(eq(copilotSessions.id, messageId));
+    // SEC-011: scope by userId + sessionId so users can't mutate other sessions
+    const rows = await db.select().from(copilotSessions).where(
+      and(
+        eq(copilotSessions.id, messageId),
+        eq(copilotSessions.userId, userId),
+        eq(copilotSessions.sessionId, sessionId),
+      )
+    );
     const msg = rows[0];
     if (msg && msg.proposedAction) {
       const action = msg.proposedAction as any;

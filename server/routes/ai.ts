@@ -12,6 +12,7 @@ import { searchRecipesForCopilot, type SpoonacularRecipe } from "../services/spo
 import { storage } from "../storage";
 import { z } from "zod";
 import { aiCache, TTL_24H } from "../utils/cache";
+import { detectTags } from "../utils/autoTag";
 
 function getAiCallsRemaining(tier: string, callsToday: number): number {
   if (tier === 'premium') return 9999;
@@ -218,14 +219,7 @@ router.post("/copilot/save-recipe", async (req, res, next) => {
       : 'dinner';
 
     // Auto-detect tags from title + cook time
-    const titleLower = recipe.title.toLowerCase();
-    const autoTags: string[] = [...(recipe.diets || [])];
-    if (/crock.?pot|slow.?cook/.test(titleLower)) { if (!autoTags.includes('crockpot')) autoTags.push('crockpot'); }
-    if (/instant.?pot|pressure.?cook/.test(titleLower)) { if (!autoTags.includes('quick')) autoTags.push('quick'); if (!autoTags.includes('one-pot')) autoTags.push('one-pot'); }
-    if (/air.?fry/.test(titleLower)) { if (!autoTags.includes('quick')) autoTags.push('quick'); }
-    if (/grill|bbq|barbecue/.test(titleLower)) { if (!autoTags.includes('grilled')) autoTags.push('grilled'); }
-    if (recipe.readyInMinutes > 0 && recipe.readyInMinutes <= 30 && !autoTags.includes('quick')) autoTags.push('quick');
-    if (recipe.readyInMinutes >= 240 && !autoTags.includes('crockpot')) { if (!autoTags.includes('slow-cook')) autoTags.push('slow-cook'); }
+    const autoTags = detectTags(recipe.title, recipe.readyInMinutes, recipe.diets || []);
 
     const saved = await storage.createRecipe({
       householdId: (req.user as any).householdId,

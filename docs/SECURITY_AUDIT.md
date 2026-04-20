@@ -40,7 +40,7 @@ Update this file whenever a new security issue is found or fixed.
 |----|---------|------|--------|-------|
 | SEC-009 | Household routes (`GET /api/household`, `PATCH /api/household/name`, `POST /api/household/join`, `POST /api/household/regenerate`, `POST /api/household/leave`) use inline `req.isAuthenticated()` instead of `requireAuth` middleware — inconsistent, harder to audit. | `server/routes.ts:317-388` | ⚠️ Open | Functionally correct but should be standardised to `requireAuth`. |
 | SEC-010 | No CSRF token validation — relies solely on `SameSite=lax` cookie policy. | Global | ⚠️ Open | Acceptable for MVP; revisit if moving to cross-origin requests. |
-| SEC-011 | `GET /api/ai/copilot/history/:sessionId` and `GET /api/ai/copilot/execute-tool` — no `sessionId` ownership check; any authenticated user could read another user's copilot history by guessing a sessionId. | `server/routes/ai.ts:48,59` | ⚠️ Open | Requires sessionId scoped to userId. |
+| SEC-011 | `storage.updateProposedActionStatus` WHERE clause only matched on `messageId` — any authenticated user could mutate another user's proposed copilot action by guessing an integer messageId. | `server/storage.ts:462` | ✅ Fixed | Tier 2 commit |
 | SEC-012 | In-memory AI cache (`server/utils/cache.ts`) capped at 500 entries but no TTL expiry — stale AI responses can persist. | `server/utils/cache.ts` | ⚠️ Open | Low impact; add TTL in next iteration. |
 
 #### LOW
@@ -80,6 +80,7 @@ All CRITICAL and HIGH findings above have automated test coverage:
 | `server/__tests__/auth.test.ts` | SEC-001, SEC-002, SEC-008 |
 | `server/__tests__/auth-guards.test.ts` | SEC-004, SEC-006, SEC-009 |
 | `server/__tests__/household-isolation.test.ts` | SEC-003, SEC-005, SEC-007 |
+| `server/__tests__/copilot-auth.test.ts` | SEC-011 |
 
 Run with: `npm test`
 
@@ -88,9 +89,8 @@ Run with: `npm test`
 ### Outstanding Work (Prioritised)
 
 1. **SEC-009** — Migrate household routes to `requireAuth` middleware (consistency + auditability)
-2. **SEC-011** — Scope copilot session history to `userId`
-3. **SEC-010** — Evaluate CSRF token requirement as app scales
-4. **SEC-013/014** — Add rate limiting to CRUD + import endpoints
+2. **SEC-010** — Evaluate CSRF token requirement as app scales
+3. **SEC-013/014** — Add rate limiting to CRUD + import endpoints
 
 ---
 
