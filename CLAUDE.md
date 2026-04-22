@@ -31,10 +31,11 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 ## Architecture
 
 ### Auth (`server/auth.ts`)
-- Passport local strategy, plaintext password compare (no bcrypt yet — known gap)
+- Passport local strategy, **bcrypt (cost 12)** — legacy plaintext accounts auto-upgraded on next login
 - **`safeUser()`** strips password before every `res.json()` — never return password to client
-- Sessions in MemoryStore — lost on server restart (acceptable for now)
+- Sessions in **PostgreSQL (connect-pg-simple)** — survive server restarts
 - Rate limits: free=5 AI calls/day, 20 copilot/day; test tier=50 each; premium=unlimited
+- Password reset via Resend email — 15-min token, stored hashed in DB
 
 ### Routes
 - `server/routes.ts` — all non-AI routes: recipes CRUD, shopping list, weekly plans, pantry, URL import
@@ -49,10 +50,17 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 - `copilotSessions` — chat history per sessionId per user
 - `activityLog` — `(userId, action, recipeId, recipeName, createdAt)` — actions: recipe_added, recipe_deleted, plan_updated, plan_meal_added, pantry_added
 
-### Recipe Categorization (`server/routes.ts: guessCategory()`)
+### Recipe Categorization (`server/utils/categorization.ts: guessCategory()`)
 - Always re-run `guessCategory(name)` at shopping list generation time — never trust stored `ing.category`
 - Pantry/spices checked BEFORE produce to prevent "garlic powder" → produce
-- Order: protein → dairy → frozen → bakery → grains → condiments → pantry → produce
+- Order: protein → frozen → bakery → grains → dairy → condiments → pantry → produce
+- Extracted from routes.ts to utility module; 98 unit tests in `server/__tests__/guess-category.test.ts`
+
+### Social Media Import (`POST /api/ai/import-from-social`)
+- Two modes: `text` (paste caption) → haiku; `image` (screenshot upload) → sonnet-4-6 vision
+- Returns same shape as URL import — frontend uses shared `populateFromImport()` helper
+- 4 MB image size guard; strips data URL prefix automatically
+- Rate-limited via `aiRateLimit` middleware
 
 ### Copilot Recipe Search (`server/services/spoonacular.ts: searchRecipesForCopilot()`)
 - First search: Spoonacular complexSearch + Edamam in parallel via `Promise.allSettled`, results interleaved
@@ -104,12 +112,11 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 
 ---
 
-## Known Issues / Tech Debt (as of 2026-04-10)
+## Known Issues / Tech Debt (as of 2026-04-16)
 
-### Security (not yet fixed)
-- Passwords stored plaintext in DB — no bcrypt
-- Most of `routes.ts` lacks `req.isAuthenticated()` guard
-- No user-scoped data isolation — all users share the same recipe/plan data
+### Security (open, non-blocking)
+- SEC-009: Some household routes use inline `req.isAuthenticated()` rather than `requireAuth` middleware — functionally identical, stylistically inconsistent
+- SEC-010: No CSRF tokens — deferred post-launch. SameSite=Lax on session cookie partially mitigates.
 
 ### Data Quality
 - Duplicate near-identical ingredient names in shopping list ("boneless skinless" vs "boneless, skinless") — needs fuzzy dedup
