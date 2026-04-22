@@ -8,13 +8,27 @@ import { createServer } from "http";
 
 // Fail fast in production if critical secrets are missing
 if (process.env.NODE_ENV === "production") {
-  if (!process.env.SESSION_SECRET) {
-    console.error("FATAL: SESSION_SECRET env var is required in production");
-    process.exit(1);
+  const required = [
+    "SESSION_SECRET",
+    "DATABASE_URL",
+    "CLIENT_URL",
+  ];
+  const billing = [
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "STRIPE_PRICE_MONTHLY",
+    "STRIPE_PRICE_ANNUAL",
+  ];
+  for (const key of required) {
+    if (!process.env[key]) {
+      console.error(`FATAL: ${key} env var is required in production`);
+      process.exit(1);
+    }
   }
-  if (!process.env.DATABASE_URL) {
-    console.error("FATAL: DATABASE_URL env var is required in production");
-    process.exit(1);
+  for (const key of billing) {
+    if (!process.env[key]) {
+      console.warn(`WARN: ${key} is not set — Stripe billing will not work`);
+    }
   }
 }
 
