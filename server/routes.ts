@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import aiRoutes from "./routes/ai";
 import onboardingRoutes from "./routes/onboarding";
+import billingRoutes from "./routes/billing";
 import { requireAuth, isSafeUrl } from "./middleware/requireAuth";
 import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, type InsertWeeklyPlan } from "@shared/schema";
 import { guessCategory, guessCuisine } from "./utils/categorization";
@@ -137,6 +138,10 @@ export async function registerRoutes(server: Server, app: Express) {
 
   // AI routes (all require auth)
   app.use("/api/ai", requireAuth, aiRoutes);
+
+  // Billing — webhook is public (signature-verified), checkout/portal require auth (handled inside router)
+  app.use("/api/billing", billingRoutes);
+
 
   // Onboarding routes (all require auth)
   app.use("/api/onboarding", requireAuth, onboardingRoutes);

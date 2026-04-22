@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Settings, Info, Loader2, X, Plus, ArrowRight,
   Home, Copy, Check, Link2, RefreshCw, LogOut,
-  Shield, ChevronDown, Eye, EyeOff, Sparkles,
+  Shield, ChevronDown, Eye, EyeOff, Sparkles, CreditCard,
 } from "lucide-react";
+import { UpgradeModal } from "@/components/UpgradeModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -139,6 +140,20 @@ export default function ProfilePage() {
   const [newPw, setNewPw] = useState("");
   const [showPw, setShowPw] = useState(false);
 
+  // Billing state
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
+
+  // Detect ?upgraded=true after Stripe Checkout redirect
+  useEffect(() => {
+    if (window.location.hash.includes("upgraded=true")) {
+      toast({ title: "Welcome to Premium!", description: "Your household now has unlimited AI access." });
+      // Clean the URL
+      window.history.replaceState(null, "", window.location.pathname + "#/profile");
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+    }
+  }, []);
+
   // ── Queries ──────────────────────────────────────────
   const { data: user } = useQuery<any>({ queryKey: ["/api/user"], staleTime: 60_000 });
   const { data: allRecipes } = useQuery<any[]>({ queryKey: ["/api/recipes"], staleTime: 60_000 });
@@ -186,6 +201,23 @@ export default function ProfilePage() {
       toast({ title: msg, variant: "destructive" });
     },
   });
+
+  async function handleManageBilling() {
+    setBillingLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/billing/portal");
+      const data = await res.json();
+      if (data.error) {
+        toast({ title: "Couldn't open billing portal", description: data.error, variant: "destructive" });
+        return;
+      }
+      window.location.href = data.url;
+    } catch (err: any) {
+      toast({ title: "Couldn't open billing portal", description: err.message, variant: "destructive" });
+    } finally {
+      setBillingLoading(false);
+    }
+  }
 
   function copyInviteLink() {
     if (!household?.inviteCode) return;
@@ -237,14 +269,36 @@ export default function ProfilePage() {
                   ? <p className="text-xs text-muted-foreground mt-0.5 truncate">{user.email}</p>
                   : <button className="text-xs text-amber-500 mt-0.5 hover:underline" onClick={() => document.getElementById('security-section')?.scrollIntoView({behavior:'smooth'})}>+ Add email for password reset</button>
                 }
-                <span className={cn(
-                  "inline-block text-xs px-2.5 py-0.5 rounded-full font-medium mt-1.5",
-                  user?.subscriptionTier === "premium"
-                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                    : "bg-muted text-muted-foreground border border-border"
-                )}>
-                  {user?.subscriptionTier === "premium" ? "✦ Premium" : "Free plan"}
-                </span>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className={cn(
+                    "inline-block text-xs px-2.5 py-0.5 rounded-full font-medium",
+                    user?.subscriptionTier === "premium"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                      : "bg-muted text-muted-foreground border border-border"
+                  )}>
+                    {user?.subscriptionTier === "premium" ? "✦ Premium" : "Free plan"}
+                  </span>
+                  {user?.subscriptionTier === "premium" ? (
+                    <button
+                      onClick={handleManageBilling}
+                      disabled={billingLoading}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {billingLoading
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <CreditCard className="h-3 w-3" />}
+                      Manage billing
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setUpgradeOpen(true)}
+                      className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 font-medium transition-colors"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      Upgrade
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -520,6 +574,8 @@ export default function ProfilePage() {
 
         </div>
       </div>
+
+      <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
     </div>
   );
 }

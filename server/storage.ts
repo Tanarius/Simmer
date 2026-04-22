@@ -53,6 +53,9 @@ export interface IStorage {
   resetAiCallsIfNewDay(userId: number): Promise<void>;
   resetCopilotCallsIfNewDay(userId: number): Promise<void>;
   updateUserSubscriptionTier(userId: number, tier: string): Promise<void>;
+  setStripeCustomer(userId: number, customerId: string): Promise<void>;
+  setStripeSubscription(userId: number, subscriptionId: string | null): Promise<void>;
+  getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
 
   // Preferences & Onboarding
   getUserPreferences(userId: number): Promise<UserPreference | null>;
@@ -308,6 +311,19 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserSubscriptionTier(userId: number, tier: string): Promise<void> {
     await db.update(users).set({ subscriptionTier: tier }).where(eq(users.id, userId));
+  }
+
+  async setStripeCustomer(userId: number, customerId: string): Promise<void> {
+    await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
+  }
+
+  async setStripeSubscription(userId: number, subscriptionId: string | null): Promise<void> {
+    await db.update(users).set({ stripeSubscriptionId: subscriptionId }).where(eq(users.id, userId));
+  }
+
+  async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
+    const rows = await db.select().from(users).where(eq(users.stripeCustomerId, customerId));
+    return rows[0];
   }
 
   // Preferences & Onboarding

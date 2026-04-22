@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { getIngredientChipClass } from "@/lib/ingredientCategories";
+import { UpgradeModal } from "@/components/UpgradeModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -296,6 +297,8 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [savingId, setSavingId] = useState<number | null>(null);
   const [searchAttempt, setSearchAttempt] = useState(0);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<string | undefined>();
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -351,6 +354,18 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
       setCurrentIdx(0);
     },
     onError: (err: any) => {
+      // Check for rate-limit 429 with upgradePrompt flag
+      try {
+        const jsonStart = err.message.indexOf("{");
+        if (jsonStart !== -1) {
+          const parsed = JSON.parse(err.message.slice(jsonStart));
+          if (parsed.upgradePrompt) {
+            setUpgradeReason(parsed.error);
+            setUpgradeOpen(true);
+            return;
+          }
+        }
+      } catch {}
       toast({ title: "Couldn't find recipes", description: err.message, variant: "destructive" });
     },
   });
@@ -691,6 +706,12 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
 
         </div>
       </div>
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        reason={upgradeReason}
+      />
     </>
   );
 }

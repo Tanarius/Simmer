@@ -22,6 +22,8 @@ export const users = pgTable("users", {
   copilotCallsToday: integer("copilot_calls_today").notNull().default(0),
   copilotResetDate: date("copilot_reset_date"),
   householdId: integer("household_id").references(() => households.id),
+  stripeCustomerId: text("stripe_customer_id").unique(),
+  stripeSubscriptionId: text("stripe_subscription_id"),
 });
 
 export const recipes = pgTable("recipes", {
