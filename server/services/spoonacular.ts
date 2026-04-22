@@ -267,11 +267,11 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
   }
 
   // ── First search: complexSearch with cascading fallbacks ──
-  // Random offset ensures a different slice of results each call (Spoonacular returns
-  // the same top-N by popularity without it)
+  // Offset 0 on first search — ensures we hit the most relevant results.
+  // Random offsets on retries so subsequent cascade attempts return different slices.
   const base: Record<string, any> = {
     number: count,
-    offset: Math.floor(Math.random() * 20),
+    offset: 0,
     addRecipeInformation: true,
     fillIngredients: false,
     apiKey,
@@ -284,10 +284,13 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
   if (avoidedIngredients.length) base.excludeIngredients = avoidedIngredients.slice(0, 5).join(',');
   if (!cuisine && cuisineChoice === 'surprise') base.sort = 'random';
 
-  // Inject cooking-method keywords for crockpot/air-fryer/meal-prep vibes
-  if (params.vibe === 'crockpot')  base.query = ((base.query || '') + ' slow cooker crock pot').trim();
-  if (params.vibe === 'air fryer') base.query = ((base.query || '') + ' air fryer').trim();
-  if (params.vibe === 'meal prep') base.query = ((base.query || '') + ' meal prep batch cooking').trim();
+  // Track cooking-method keywords separately so we can drop them independently
+  // from the cuisine filter during the cascade.
+  let vibeQuery: string | null = null;
+  if (vibe === 'crockpot')  vibeQuery = 'slow cooker crock pot';
+  if (vibe === 'air fryer') vibeQuery = 'air fryer';
+  if (vibe === 'meal prep') vibeQuery = 'meal prep batch cooking';
+  if (vibeQuery) base.query = vibeQuery;
 
   // Sides override: treat protein=sides as a meal type
   const effectiveMealType = protein === 'sides' ? 'sides' : mealType;
@@ -308,63 +311,68 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
       searchRecipesEdamam({ ...params, count: Math.ceil(count / 2) }),
     ]);
     let results = spoonResults.status === 'fulfilled' ? spoonResults.value : [];
-    const edamam = edamamResults.status === 'fulfilled' ? edamamResults.value : [];
+    const edamam1 = edamamResults.status === 'fulfilled' ? edamamResults.value : [];
 
     if (results.length >= 3) {
       // Enrich with Edamam — interleave for variety, cap at count
-      if (edamam.length > 0) {
+      if (edamam1.length > 0) {
         const combined: SpoonacularRecipe[] = [];
-        const maxLen = Math.max(results.length, edamam.length);
+        const maxLen = Math.max(results.length, edamam1.length);
         for (let i = 0; i < maxLen; i++) {
           if (i < results.length) combined.push(results[i]);
-          if (i < edamam.length) combined.push(edamam[i]);
+          if (i < edamam1.length) combined.push(edamam1[i]);
         }
         return filterByProtein(combined.slice(0, count));
       }
       return filterByProtein(results);
     }
 
-    // Attempt 2: relax time + health, keep cuisine + protein hint
-    const relaxed = { ...base };
+    // Edamam parallel fetch already has enough — use it before cascading further
+    if (edamam1.length >= 3) return filterByProtein(edamam1.slice(0, count));
+
+    // Attempt 2: relax time + health constraints, keep cuisine + cooking-method query
+    const relaxed: Record<string, any> = { ...base, sort: 'popularity', offset: Math.floor(Math.random() * 30) };
     delete relaxed.maxReadyTime;
     delete relaxed.minHealthScore;
-    relaxed.sort = 'popularity';
     results = await complexSearch(relaxed);
-    if (results.length >= 3) return results;
+    if (results.length >= 3) return filterByProtein(results);
 
-    // Attempt 3: drop type filter (too restrictive for snack/sides)
+    // Attempt 3: drop meal-type filter, keep cuisine + cooking-method query
     const noType = { ...relaxed };
     delete noType.type;
     results = await complexSearch(noType);
-    if (results.length >= 3) return results;
+    if (results.length >= 3) return filterByProtein(results);
 
-    // Attempt 4: drop protein filter, keep cuisine
+    // Attempt 4: drop protein filter, keep cuisine + cooking-method query
     const noProtein = { ...noType };
     delete noProtein.includeIngredients;
     delete noProtein.diet;
     results = await complexSearch(noProtein);
-    if (results.length >= 3) return results;
+    if (results.length >= 3) return filterByProtein(results);
 
-    // Attempt 5: drop cuisine — use as query keyword
-    const broadest = { ...noProtein };
+    // Attempt 5: drop cooking-method query — cuisine stays as a hard filter.
+    // "Give me any [cuisine] recipe" is better than loosening the cuisine itself.
+    const cuisineOnly = { ...noProtein };
+    delete cuisineOnly.query;
+    // Snack meal-type uses query text instead of type= — preserve that keyword
+    if (mealType === 'snack') cuisineOnly.query = 'snack';
+    results = await complexSearch(cuisineOnly);
+    if (results.length >= 3) return filterByProtein(results);
+
+    // Attempt 6: drop cuisine too — absolute last-resort Spoonacular call
+    const broadest = { ...cuisineOnly };
     delete broadest.cuisine;
-    if (cuisine) {
-      const kw = cuisine.split(',')[0];
-      broadest.query = broadest.query ? `${broadest.query} ${kw}` : kw;
-    }
     results = await complexSearch(broadest);
     if (results.length > 0) {
-      // Top up with Edamam if we got fewer than count
-      if (results.length < count) {
-        const edamam = await searchRecipesEdamam({ ...params, count: count - results.length });
-        return [...results, ...edamam].slice(0, count);
-      }
-      return results;
+      const edamam2 = results.length < count
+        ? await searchRecipesEdamam({ ...params, count: count - results.length })
+        : [];
+      return filterByProtein([...results, ...edamam2].slice(0, count));
     }
 
-    // Attempt 6: Edamam
+    // Attempt 7: Edamam only
     const edamamFallback = await searchRecipesEdamam(params);
-    if (edamamFallback.length > 0) return edamamFallback;
+    if (edamamFallback.length > 0) return filterByProtein(edamamFallback);
 
     return searchTheMealDB(params);
   } catch (err: any) {
@@ -421,7 +429,7 @@ const MEALDB_AREA_MAP: Record<string, string[]> = {
   italian:          ['Italian'],
   asian:            ['Chinese', 'Japanese', 'Korean', 'Thai', 'Vietnamese'],
   'tex-mex':        ['Mexican'],
-  american:         ['American', 'Canadian'],
+  american:         ['American'],
   indian:           ['Indian'],
   mediterranean:    ['Greek', 'Spanish', 'French', 'Moroccan'],
   japanese:         ['Japanese'],
