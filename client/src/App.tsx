@@ -9,6 +9,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useTheme } from "@/hooks/use-theme";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { UpgradeBanner } from "@/components/UpgradeBanner";
 import NotFound from "@/pages/not-found";
 import RecipesPage from "@/pages/recipes";
 import PlannerPage from "@/pages/planner";
@@ -20,6 +22,9 @@ import JoinPage from "@/pages/join";
 import PricingPage from "@/pages/pricing";
 import OnboardingPage from "@/pages/onboarding";
 import ResetPasswordPage from "@/pages/reset-password";
+import LandingPage from "@/pages/landing";
+import TermsPage from "@/pages/terms";
+import PrivacyPage from "@/pages/privacy";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { Loader2 } from "lucide-react";
@@ -36,16 +41,20 @@ function AppRouter() {
     enabled: !!user && user.status !== 401 && Object.keys(user).length > 0,
   });
 
-  // These pages are accessible without auth
+  // Always-public pages (no auth required)
   if (location.startsWith("/join/")) return <JoinPage />;
   if (location.startsWith("/reset-password")) return <ResetPasswordPage />;
+  if (location === "/terms") return <TermsPage />;
+  if (location === "/privacy") return <PrivacyPage />;
 
   if (isLoading || (onboardingLoading && user && user.status !== 401 && Object.keys(user).length > 0)) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
   }
 
+  // Unauthenticated: show landing page at "/" and auth page at "/auth"
   if (!user || user.status === 401 || Object.keys(user).length === 0) {
-    return <AuthPage />;
+    if (location === "/auth") return <AuthPage />;
+    return <LandingPage />;
   }
 
   if (onboarding && !onboarding.completed) {
@@ -84,7 +93,6 @@ function NoEmailBanner() {
 }
 
 function AppLayout() {
-  // Initialize theme on mount
   useTheme();
 
   const sidebarStyle = {
@@ -104,9 +112,12 @@ function AppLayout() {
                 <ThemeToggle />
               </div>
               <NoEmailBanner />
+              <UpgradeBanner />
             </header>
             <main className="flex-1 overflow-auto">
-              <AppRouter />
+              <ErrorBoundary>
+                <AppRouter />
+              </ErrorBoundary>
             </main>
           </div>
         </div>

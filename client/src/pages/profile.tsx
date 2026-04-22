@@ -122,6 +122,70 @@ function EmailSection() {
   );
 }
 
+function DeleteAccountSection() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleDelete(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await apiRequest("DELETE", "/api/auth/account", { password });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error || "Failed to delete account", variant: "destructive" });
+        return;
+      }
+      queryClient.clear();
+      window.location.hash = "#/";
+    } catch (err: any) {
+      toast({ title: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 pt-4 border-t border-border/50">
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="text-xs text-destructive/70 hover:text-destructive transition-colors"
+        >
+          Delete account
+        </button>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-destructive">Delete account permanently</p>
+          <p className="text-[11px] text-muted-foreground">This will delete all your data. If you're the only household member, all household data will also be deleted. This cannot be undone.</p>
+          <form onSubmit={handleDelete} className="space-y-2 max-w-sm">
+            <Input
+              type="password"
+              placeholder="Enter your password to confirm"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="h-8 text-sm"
+              required
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" variant="destructive" className="h-7 text-xs" disabled={!password || loading}>
+                {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Delete forever
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setOpen(false); setPassword(""); }}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const { toast } = useToast();
 
@@ -560,6 +624,9 @@ export default function ProfilePage() {
               </form>
 
               <EmailSection />
+
+              {/* Delete account */}
+              <DeleteAccountSection />
             </div>
           </Section>
           </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -172,6 +172,14 @@ export default function AuthPage() {
                 : null}
               {mode === "login" ? "Sign in" : "Create account"}
             </Button>
+            {mode === "register" && (
+              <p className="text-[11px] text-center text-muted-foreground">
+                By creating an account you agree to our{" "}
+                <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
+                {" "}and{" "}
+                <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
+              </p>
+            )}
           </form>
         </CardContent>
         <CardFooter>

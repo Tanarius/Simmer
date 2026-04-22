@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle, Instagram, Upload, FileText } from "lucide-react";
+import { Heart, Clock, Users, ChevronRight, X, Plus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle, Instagram, Upload, FileText } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -316,31 +316,22 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-semibold">Ingredients</h4>
               {/* Serving scaler */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Servings</span>
-                <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground mr-0.5">Scale</span>
+                {[1, 2, 3, 4].map(mult => (
                   <button
-                    onClick={() => setScaledServings(s => Math.max(1, (s ?? baseServings) - 1))}
-                    className="flex items-center justify-center w-6 h-6 rounded-full border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    key={mult}
+                    onClick={() => setScaledServings(mult === 1 ? null : baseServings * mult)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-xs font-medium border transition-all",
+                      scale === mult
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
+                    )}
                   >
-                    <Minus className="h-3 w-3" />
+                    ×{mult}
                   </button>
-                  <span className="text-sm font-semibold w-6 text-center tabular-nums">{displayServings}</span>
-                  <button
-                    onClick={() => setScaledServings(s => (s ?? baseServings) + 1)}
-                    className="flex items-center justify-center w-6 h-6 rounded-full border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </div>
-                {scale !== 1 && (
-                  <button
-                    onClick={() => setScaledServings(null)}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    reset
-                  </button>
-                )}
+                ))}
               </div>
             </div>
 

@@ -43,16 +43,16 @@ router.get("/dishes", async (req, res, next) => {
   try {
     // Return a curated variety of dishes to build the taste profile
     const dishes = [
-      { id: 1, dishName: "Spicy Tuna Roll", cuisineType: "asian", complexity: "medium", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1579584425555-c3ce17f6a08c" },
-      { id: 2, dishName: "Classic Cheeseburger", cuisineType: "american", complexity: "easy", mealType: "lunch", imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd" },
-      { id: 3, dishName: "Chicken Tikka Masala", cuisineType: "indian", complexity: "hard", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1565557623262-b51c2513a641" },
-      { id: 4, dishName: "Avocado Toast", cuisineType: "american", complexity: "easy", mealType: "breakfast", imageUrl: "https://images.unsplash.com/photo-1541519227354-08fa5d50c44d" },
-      { id: 5, dishName: "Margherita Pizza", cuisineType: "italian", complexity: "medium", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1604068549290-dea0e4a305ca" },
-      { id: 6, dishName: "Pad Thai", cuisineType: "asian", complexity: "medium", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1559314809-0d155014e29e" },
-      { id: 7, dishName: "Beef Tacos", cuisineType: "tex-mex", complexity: "easy", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1551504734-5ee1c4a1479b" },
-      { id: 8, dishName: "Salmon Salad", cuisineType: "other", complexity: "easy", mealType: "lunch", imageUrl: "https://images.unsplash.com/photo-1467003909585-2f8a72700288" },
-      { id: 9, dishName: "Mushroom Risotto", cuisineType: "italian", complexity: "hard", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1476124369491-e7addf5db371" },
-      { id: 10, dishName: "Pancakes", cuisineType: "american", complexity: "easy", mealType: "breakfast", imageUrl: "https://images.unsplash.com/photo-1528207776546-3820a4b73bd3" }
+      { id: 1, dishName: "Spicy Tuna Roll", cuisineType: "asian", complexity: "medium", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1579584425555-c3ce17f6a08c?w=600&q=75&auto=format" },
+      { id: 2, dishName: "Classic Cheeseburger", cuisineType: "american", complexity: "easy", mealType: "lunch", imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&q=75&auto=format" },
+      { id: 3, dishName: "Chicken Tikka Masala", cuisineType: "indian", complexity: "hard", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=600&q=75&auto=format" },
+      { id: 4, dishName: "Avocado Toast", cuisineType: "american", complexity: "easy", mealType: "breakfast", imageUrl: "https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=600&q=75&auto=format" },
+      { id: 5, dishName: "Margherita Pizza", cuisineType: "italian", complexity: "medium", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1604068549290-dea0e4a305ca?w=600&q=75&auto=format" },
+      { id: 6, dishName: "Pad Thai", cuisineType: "asian", complexity: "medium", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1559314809-0d155014e29e?w=600&q=75&auto=format" },
+      { id: 7, dishName: "Beef Tacos", cuisineType: "tex-mex", complexity: "easy", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=600&q=75&auto=format" },
+      { id: 8, dishName: "Salmon Salad", cuisineType: "other", complexity: "easy", mealType: "lunch", imageUrl: "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&q=75&auto=format" },
+      { id: 9, dishName: "Mushroom Risotto", cuisineType: "italian", complexity: "hard", mealType: "dinner", imageUrl: "https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=600&q=75&auto=format" },
+      { id: 10, dishName: "Pancakes", cuisineType: "american", complexity: "easy", mealType: "breakfast", imageUrl: "https://images.unsplash.com/photo-1528207776546-3820a4b73bd3?w=600&q=75&auto=format" }
     ];
     res.json(dishes);
   } catch (err) {

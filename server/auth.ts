@@ -250,4 +250,33 @@ export function setupAuth(app: Express) {
       next(err);
     }
   });
+
+  app.delete("/api/auth/account", async (req, res, next) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const user = req.user as any;
+      const { password } = req.body;
+
+      // Require password confirmation
+      if (!password) return res.status(400).json({ error: "Password required to delete account" });
+
+      const isValid = user.password?.startsWith("$2")
+        ? await bcrypt.compare(password, user.password)
+        : user.password === password; // legacy plaintext (migration path)
+
+      if (!isValid) return res.status(400).json({ error: "Incorrect password" });
+
+      // Destroy session first so the user is logged out
+      await new Promise<void>((resolve, reject) =>
+        req.logout((err) => (err ? reject(err) : resolve()))
+      );
+
+      // Delete all user and household data
+      await storage.deleteUserData(user.id, user.householdId);
+
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  });
 }

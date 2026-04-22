@@ -56,6 +56,7 @@ export interface IStorage {
   setStripeCustomer(userId: number, customerId: string): Promise<void>;
   setStripeSubscription(userId: number, subscriptionId: string | null): Promise<void>;
   getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
+  deleteUserData(userId: number, householdId: number): Promise<void>;
 
   // Preferences & Onboarding
   getUserPreferences(userId: number): Promise<UserPreference | null>;
@@ -324,6 +325,33 @@ export class DatabaseStorage implements IStorage {
   async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
     const rows = await db.select().from(users).where(eq(users.stripeCustomerId, customerId));
     return rows[0];
+  }
+
+  async deleteUserData(userId: number, householdId: number): Promise<void> {
+    // Check if sole household member
+    const members = await db.select().from(users).where(eq(users.householdId, householdId));
+    const isSoleMember = members.length === 1;
+
+    // Delete user-scoped data first
+    await db.delete(activityLog).where(eq(activityLog.userId, userId));
+    await db.delete(copilotSessions).where(eq(copilotSessions.userId, userId));
+    await db.delete(mealReactions).where(eq(mealReactions.userId, userId));
+    await db.delete(onboardingSwipes).where(eq(onboardingSwipes.userId, userId));
+    await db.delete(userOnboarding).where(eq(userOnboarding.userId, userId));
+    await db.delete(userPreferences).where(eq(userPreferences.userId, userId));
+    await db.delete(userTasteProfile).where(eq(userTasteProfile.userId, userId));
+
+    // Delete the user row
+    await db.delete(users).where(eq(users.id, userId));
+
+    // If they were the sole member, clean up the household data too
+    if (isSoleMember) {
+      await db.delete(pantryStaples).where(eq(pantryStaples.householdId, householdId));
+      await db.delete(weeklyPlans).where(eq(weeklyPlans.householdId, householdId));
+      await db.delete(recipes).where(eq(recipes.householdId, householdId));
+      await db.delete(householdTasteProfile).where(eq(householdTasteProfile.householdId, householdId));
+      await db.delete(households).where(eq(households.id, householdId));
+    }
   }
 
   // Preferences & Onboarding

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   ShoppingCart, Clipboard, Check, Sprout, Beef, Milk,
-  Snowflake, Croissant, Package, Wheat, ChefHat, AlertCircle, Calendar, UtensilsCrossed
+  Snowflake, Croissant, Package, Wheat, ChefHat, AlertCircle, Calendar, UtensilsCrossed, Download
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -150,21 +150,40 @@ export default function ShoppingPage() {
     });
   }
 
-  function copyToClipboard() {
-    if (!shoppingList) return;
-    const lines: string[] = ["=== SHOPPING LIST ===\n"];
+  function buildListText(): string {
+    if (!shoppingList) return "";
+    const lines: string[] = ["=== SHOPPING LIST ==="];
+    if (scale !== 1) lines.push(`Amounts multiplied by ×${scale}`);
+    lines.push("");
     for (const [cat, items] of Object.entries(shoppingList.categories)) {
-      lines.push(`\n--- ${CATEGORY_LABELS[cat] ?? cat} ---`);
+      lines.push(`--- ${CATEGORY_LABELS[cat] ?? cat} ---`);
       for (const item of items) {
         const amtStr = item.amounts.join(" + ") + (item.amounts.length > 1 ? ` = ${item.amounts.length} batches` : "");
         lines.push(`${item.isStaple ? "(pantry) " : ""}${item.name}: ${amtStr}`);
       }
+      lines.push("");
     }
-    navigator.clipboard.writeText(lines.join("\n")).then(() => {
+    return lines.join("\n");
+  }
+
+  function copyToClipboard() {
+    if (!shoppingList) return;
+    navigator.clipboard.writeText(buildListText()).then(() => {
       setCopied(true);
       toast({ title: "Copied to clipboard!" });
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  function exportAsTxt() {
+    if (!shoppingList) return;
+    const blob = new Blob([buildListText()], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `shopping-list-${weekStart}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const totalItems = shoppingList?.totalItems ?? 0;
@@ -224,6 +243,15 @@ export default function ShoppingPage() {
               onOptimized={setAiOptimizedList}
             />
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportAsTxt}
+            disabled={!shoppingList}
+          >
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export
+          </Button>
           <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print-list">
             🖨️ Print
           </Button>
