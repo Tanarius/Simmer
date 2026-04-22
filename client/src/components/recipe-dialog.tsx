@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle } from "lucide-react";
+import { useState, useRef } from "react";
+import { Heart, Clock, Users, ChevronRight, X, Plus, Minus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle, Instagram, Upload, FileText } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -490,6 +490,11 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
 
   const [importUrl, setImportUrl] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [importTab, setImportTab] = useState<"url" | "social">("url");
+  const [socialMode, setSocialMode] = useState<"text" | "image">("text");
+  const [socialText, setSocialText] = useState("");
+  const [isSocialImporting, setIsSocialImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [cuisine, setCuisine] = useState<string>("");
@@ -524,6 +529,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
     setDifficulty("easy"); setPrepTime(10); setCookTime(30); setServings(3);
     setTags([]); setIngredients([{ name: "", amount: 1, unit: "", category: "produce" }]);
     setInstructions([""]); setImportUrl(""); setImageUrl(null); setSourceUrl(null);
+    setImportTab("url"); setSocialMode("text"); setSocialText("");
   }
 
   async function handleImportUrl() {
@@ -536,34 +542,89 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
         toast({ title: "Import failed", description: data.error, variant: "destructive" });
         return;
       }
-      // Populate form fields from imported data
-      setName(data.name || "");
-      setDescription(data.description || "");
-      setCuisine(data.cuisine || "other");
-      setMealType(data.mealType || "dinner");
-      setDifficulty(data.difficulty || "easy");
-      setPrepTime(data.prepTime || 10);
-      setCookTime(data.cookTime || 30);
-      setServings(data.servings || 3);
-      setTags(data.tags || []);
-      setImageUrl(data.imageUrl || null);
-      setSourceUrl(data.sourceUrl || importUrl.trim());
-      if (data.ingredients && data.ingredients.length > 0) {
-        setIngredients(data.ingredients.map((i: any) => ({
-          name: i.name || "",
-          amount: i.amount || 1,
-          unit: i.unit || "whole",
-          category: i.category || "pantry",
-        })));
-      }
-      if (data.instructions && data.instructions.length > 0) {
-        setInstructions(data.instructions);
-      }
-      toast({ title: "Recipe imported", description: "Review the fields below and save when ready." });
+      populateFromImport(data, importUrl.trim());
     } catch (err: any) {
       toast({ title: "Import failed", description: err.message || "Could not reach the URL", variant: "destructive" });
     } finally {
       setIsImporting(false);
+    }
+  }
+
+  function populateFromImport(data: any, fallbackSource?: string) {
+    setName(data.name || "");
+    setDescription(data.description || "");
+    setCuisine(data.cuisine || "other");
+    setMealType(data.mealType || "dinner");
+    setDifficulty(data.difficulty || "easy");
+    setPrepTime(data.prepTime || 10);
+    setCookTime(data.cookTime || 30);
+    setServings(data.servings || 3);
+    setTags(data.tags || []);
+    setImageUrl(data.imageUrl || null);
+    setSourceUrl(data.sourceUrl || fallbackSource || null);
+    if (data.ingredients?.length > 0) {
+      setIngredients(data.ingredients.map((i: any) => ({
+        name: i.name || "",
+        amount: i.amount || 1,
+        unit: i.unit || "whole",
+        category: i.category || "pantry",
+      })));
+    }
+    if (data.instructions?.length > 0) {
+      setInstructions(data.instructions);
+    }
+    toast({ title: "Recipe imported", description: "Review the fields below and save when ready." });
+  }
+
+  async function handleSocialImportText() {
+    if (!socialText.trim()) return;
+    setIsSocialImporting(true);
+    try {
+      const res = await apiRequest("POST", "/api/ai/import-from-social", {
+        mode: "text",
+        content: socialText.trim(),
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast({ title: "Import failed", description: data.error, variant: "destructive" });
+        return;
+      }
+      populateFromImport(data);
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message || "Could not parse the recipe", variant: "destructive" });
+    } finally {
+      setIsSocialImporting(false);
+    }
+  }
+
+  async function handleSocialImportImage(file: File) {
+    if (file.size > 4 * 1024 * 1024) {
+      toast({ title: "Image too large", description: "Please use a screenshot under 4 MB.", variant: "destructive" });
+      return;
+    }
+    setIsSocialImporting(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await apiRequest("POST", "/api/ai/import-from-social", {
+        mode: "image",
+        content: base64,
+        mimeType: file.type,
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast({ title: "Import failed", description: data.error, variant: "destructive" });
+        return;
+      }
+      populateFromImport(data);
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message || "Could not read the image", variant: "destructive" });
+    } finally {
+      setIsSocialImporting(false);
     }
   }
 
@@ -632,38 +693,164 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5 mt-2">
-          {/* URL Import */}
-          <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Link className="h-3 w-3" />
-              Import from URL
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Paste a recipe URL (AllRecipes, Food Network, Tasty, etc.)"
-                value={importUrl}
-                onChange={(e) => setImportUrl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleImportUrl(); } }}
-                data-testid="input-import-url"
-                className="flex-1"
-              />
-              <Button
+          {/* Import Section — URL or Social */}
+          <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+            {/* Tab row */}
+            <div className="flex gap-1">
+              <button
                 type="button"
-                variant="secondary"
-                onClick={handleImportUrl}
-                disabled={isImporting || !importUrl.trim()}
-                data-testid="button-import-url"
-              >
-                {isImporting ? (
-                  <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Importing...</>
-                ) : (
-                  "Import"
+                onClick={() => setImportTab("url")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors",
+                  importTab === "url"
+                    ? "bg-background border border-border text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
-              </Button>
+              >
+                <Link className="h-3 w-3" /> Import from URL
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportTab("social")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors",
+                  importTab === "social"
+                    ? "bg-background border border-border text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Instagram className="h-3 w-3" /> Instagram / Social
+              </button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Works with most major recipe sites. The form below will auto-fill — review and save.
-            </p>
+
+            {/* URL tab */}
+            {importTab === "url" && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Paste a recipe URL (AllRecipes, Food Network, Tasty, etc.)"
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleImportUrl(); } }}
+                    data-testid="input-import-url"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleImportUrl}
+                    disabled={isImporting || !importUrl.trim()}
+                    data-testid="button-import-url"
+                  >
+                    {isImporting ? (
+                      <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Importing...</>
+                    ) : (
+                      "Import"
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Works with most major recipe sites. The form below will auto-fill — review and save.
+                </p>
+              </div>
+            )}
+
+            {/* Social tab */}
+            {importTab === "social" && (
+              <div className="space-y-3">
+                {/* Mode toggle */}
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSocialMode("text")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors",
+                      socialMode === "text"
+                        ? "bg-orange-500/10 text-orange-400 border border-orange-500/30"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <FileText className="h-3 w-3" /> Paste caption
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSocialMode("image")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors",
+                      socialMode === "image"
+                        ? "bg-orange-500/10 text-orange-400 border border-orange-500/30"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Upload className="h-3 w-3" /> Upload screenshot
+                  </button>
+                </div>
+
+                {socialMode === "text" ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      placeholder={"Paste the recipe caption from Instagram, TikTok, Facebook, etc.\n\nExample:\n'My famous chicken tikka! You'll need:\n- 1 lb chicken\n- 1 cup yogurt...'"}
+                      value={socialText}
+                      onChange={(e) => setSocialText(e.target.value)}
+                      className="min-h-[100px] text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full"
+                      onClick={handleSocialImportText}
+                      disabled={isSocialImporting || !socialText.trim()}
+                    >
+                      {isSocialImporting ? (
+                        <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Extracting recipe...</>
+                      ) : (
+                        <><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Extract Recipe with AI</>
+                      )}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div
+                      className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-orange-500/50 transition-colors"
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files[0];
+                        if (file) handleSocialImportImage(file);
+                      }}
+                    >
+                      {isSocialImporting ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="h-6 w-6 animate-spin text-orange-400" />
+                          <p className="text-xs text-muted-foreground">Extracting recipe from screenshot...</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <Upload className="h-6 w-6 text-muted-foreground" />
+                          <p className="text-sm font-medium">Drop screenshot here or click to browse</p>
+                          <p className="text-xs text-muted-foreground">PNG, JPG, WebP — max 4 MB</p>
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleSocialImportImage(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Take a screenshot of an Instagram or TikTok recipe post and upload it. AI will extract the recipe automatically.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <Separator />

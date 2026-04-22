@@ -428,9 +428,9 @@ router.post("/tag-recipe", async (req, res, next) => {
     try {
       const parsedIngredients = typeof recipe.ingredients === "string" ? JSON.parse(recipe.ingredients) : recipe.ingredients;
       const stepStrings = recipe.instructions ? JSON.parse(recipe.instructions) : [];
-      
+
       const tags = await autoTagRecipe(recipe.name, parsedIngredients, stepStrings);
-      
+
       await storage.updateRecipe(recipeId, (req.user as any).householdId, {
         tags: JSON.stringify(tags.dietaryFlags || []),
         difficulty: tags.difficulty || 'medium',
@@ -441,8 +441,126 @@ router.post("/tag-recipe", async (req, res, next) => {
       res.json({ tags });
     } catch (tagError) {
       console.error("Auto tag failed", tagError);
-      res.json({ tags: {} }); 
+      res.json({ tags: {} });
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Social Media Import ─────────────────────────────────────────────────────
+// Accepts either a pasted caption (text) or a base64-encoded screenshot (image).
+// Returns the same shape as /api/recipes/import-url so the frontend can reuse
+// the same populate logic.
+
+const SOCIAL_RECIPE_PROMPT = `You are a recipe extraction assistant. Extract a recipe from the provided content (a social media post caption or screenshot). Return ONLY a raw JSON object with no markdown fences, no explanation. If no recipe is found, return {"error": "No recipe found"}.
+
+JSON shape:
+{
+  "name": string,
+  "description": string,
+  "cuisine": "tex-mex"|"italian"|"asian"|"american"|"mediterranean"|"indian"|"other",
+  "mealType": "breakfast"|"lunch"|"dinner"|"either",
+  "servings": number,
+  "prepTime": number (minutes),
+  "cookTime": number (minutes),
+  "ingredients": [{"name": string, "amount": number, "unit": string}],
+  "instructions": [string],
+  "tags": string[]
+}
+
+Rules:
+- ingredients[].amount must be a number (use 1 if unclear)
+- instructions must be an array of plain strings (no numbering)
+- tags: only values from: crockpot, slow-cook, grilled, quick, make-ahead, freezer-friendly, one-pot, one-pan, air-fryer
+- If prep/cook times are not mentioned, use 0
+- If the image is a screenshot with partial text, extract whatever is visible`;
+
+router.post("/import-from-social", aiRateLimit, async (req, res, next) => {
+  try {
+    const { mode, content, mimeType } = req.body;
+
+    if (!mode || !content) {
+      return res.status(400).json({ error: "mode and content are required" });
+    }
+    if (mode !== "text" && mode !== "image") {
+      return res.status(400).json({ error: "mode must be 'text' or 'image'" });
+    }
+
+    // Image size guard: base64 of 4MB binary = ~5.5MB string
+    if (mode === "image" && content.length > 6_000_000) {
+      return res.status(400).json({ error: "Image too large. Please use a screenshot under 4 MB." });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      const e: any = new Error("ANTHROPIC_API_KEY is not configured");
+      e.status = 503;
+      throw e;
+    }
+
+    const Anthropic = (await import("@anthropic-ai/sdk")).default;
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    let messageContent: any[];
+
+    if (mode === "text") {
+      messageContent = [{ type: "text", text: `Social media post content:\n\n${content}` }];
+    } else {
+      // Image mode — use vision
+      const validMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      const safeMime = validMimeTypes.includes(mimeType) ? mimeType : "image/jpeg";
+
+      // Strip data URL prefix if present
+      const base64Data = content.replace(/^data:image\/[a-z]+;base64,/, "");
+
+      messageContent = [
+        {
+          type: "image",
+          source: { type: "base64", media_type: safeMime, data: base64Data },
+        },
+        { type: "text", text: "Extract the recipe from this social media screenshot." },
+      ];
+    }
+
+    // Use Sonnet for image (better OCR), Haiku for text (cheaper + fast enough)
+    const model = mode === "image" ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
+
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 1500,
+      system: SOCIAL_RECIPE_PROMPT,
+      messages: [{ role: "user", content: messageContent }],
+    });
+
+    const textBlock = msg.content.find((b) => b.type === "text") as any;
+    if (!textBlock?.text) {
+      return res.status(422).json({ error: "No response from AI" });
+    }
+
+    let raw = textBlock.text.trim();
+    if (raw.startsWith("```")) raw = raw.replace(/^```[a-z]*\n?/, "").replace(/```$/, "").trim();
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return res.status(422).json({ error: "Could not parse AI response as JSON" });
+    }
+
+    if (parsed.error) {
+      return res.status(422).json({ error: parsed.error });
+    }
+
+    // Normalise types — Claude sometimes returns amounts as strings
+    if (Array.isArray(parsed.ingredients)) {
+      parsed.ingredients = parsed.ingredients.map((ing: any) => ({
+        ...ing,
+        amount: typeof ing.amount === "number" ? ing.amount : parseFloat(ing.amount) || 1,
+        unit: ing.unit ?? "",
+      }));
+    }
+
+    res.json(parsed);
   } catch (err) {
     next(err);
   }
