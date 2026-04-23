@@ -24,6 +24,7 @@ import OnboardingPage from "@/pages/onboarding";
 import ResetPasswordPage from "@/pages/reset-password";
 import LandingPage from "@/pages/landing";
 import SnacksPage from "@/pages/snacks";
+import HomePage from "@/pages/home";
 import TermsPage from "@/pages/terms";
 import PrivacyPage from "@/pages/privacy";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -64,7 +65,8 @@ function AppRouter() {
 
   return (
     <Switch>
-      <Route path="/" component={RecipesPage} />
+      <Route path="/" component={HomePage} />
+      <Route path="/recipes" component={RecipesPage} />
       <Route path="/planner" component={PlannerPage} />
       <Route path="/shopping" component={ShoppingPage} />
       <Route path="/pantry" component={PantryPage} />

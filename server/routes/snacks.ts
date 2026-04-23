@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { storage } from "../storage";
 import { searchProducts } from "../services/openFoodFacts";
 import { guessCategory } from "../utils/categorization";
+import { dedupeShoppingItems } from "../utils/dedupeShoppingItems";
 import rateLimit from "express-rate-limit";
 
 const router = Router();
@@ -107,7 +108,9 @@ router.post("/shopping/bulk", requireAuth, async (req, res, next) => {
     const userId = (req.user as any).id;
     const { items } = req.body as { items: { name: string; amount?: string; unit?: string; category?: string; source?: string; sourceId?: number }[] };
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "items array required" });
-    const enriched = items.map(i => ({ ...i, category: i.category ?? guessCategory(i.name) }));
+    const enriched = dedupeShoppingItems(
+      items.map(i => ({ ...i, category: i.category ?? guessCategory(i.name) }))
+    );
     const added = await storage.bulkAddShoppingItems(householdId, userId, enriched);
     res.status(201).json(added);
   } catch (err) { next(err); }

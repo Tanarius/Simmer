@@ -1,4 +1,4 @@
-import { ChefHat, Calendar, ShoppingCart, Package, Sparkles, LogOut, Cookie } from "lucide-react";
+import { ChefHat, Calendar, ShoppingCart, Package, Sparkles, LogOut, Cookie, Home } from "lucide-react";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/sidebar";
 
 const navItems = [
-  { title: "Recipes", url: "/", icon: ChefHat },
+  { title: "Home", url: "/", icon: Home },
+  { title: "Recipes", url: "/recipes", icon: ChefHat },
   { title: "Weekly Plan", url: "/planner", icon: Calendar },
   { title: "Shopping List", url: "/shopping", icon: ShoppingCart },
   { title: "Snacks & Products", url: "/snacks", icon: Cookie },

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
-import { Heart, Clock, Users, ChevronRight, X, Plus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle, Instagram, Upload, FileText } from "lucide-react";
+import { Heart, Clock, Users, ChevronRight, X, Plus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle, Instagram, Upload, FileText, Flame } from "lucide-react";
+import { CookMode } from "@/components/CookMode";
 import {
   Dialog,
   DialogContent,
@@ -133,6 +134,7 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
   const [editInstructions, setEditInstructions] = useState("");
   const [scaledServings, setScaledServings] = useState<number | null>(null);
   const [imgError, setImgError] = useState(false);
+  const [cookMode, setCookMode] = useState(false);
 
   const updateMutation = useMutation({
     mutationFn: (data: { name: string; instructions: string }) =>
@@ -192,6 +194,9 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
 
   if (!recipe) return null;
 
+  // Cook Mode overlay — renders full-screen, outside the dialog
+  if (cookMode) return <CookMode recipe={recipe} onClose={() => setCookMode(false)} />;
+
   const tags = parseTags(recipe.tags);
   const baseIngredients = parseIngredients(recipe.ingredients);
   const instructions = parseInstructions(recipe.instructions);
@@ -219,6 +224,14 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             {/* Action buttons — inset from right so they don't clash with the shadcn X button */}
             <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
+              <Button
+                size="sm"
+                className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white gap-1.5 font-semibold"
+                onClick={() => setCookMode(true)}
+              >
+                <Flame className="h-3.5 w-3.5" />
+                Cook
+              </Button>
               <Button
                 size="icon"
                 variant="secondary"
@@ -264,6 +277,10 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
               {/* Action buttons when no image */}
               {(!recipe.imageUrl || imgError) && (
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <Button size="sm" className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white gap-1.5 font-semibold" onClick={() => setCookMode(true)}>
+                    <Flame className="h-3.5 w-3.5" />
+                    Cook
+                  </Button>
                   <Button size="icon" variant="outline" className={cn("text-purple-500 border-purple-200 hover:bg-purple-50 dark:border-purple-800/50 dark:hover:bg-purple-900/30", cleanMutation.isPending && "opacity-50")} onClick={() => cleanMutation.mutate()} disabled={cleanMutation.isPending} title="Clean & Structure with Kitchen Copilot">
                     {cleanMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                   </Button>
