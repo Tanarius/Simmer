@@ -3,13 +3,14 @@ import { Pool } from "pg";
 import {
   recipes, weeklyPlans, pantryStaples, users, households,
   userPreferences, userOnboarding, onboardingSwipes,
-  userTasteProfile, householdTasteProfile, copilotSessions, activityLog, mealReactions
+  userTasteProfile, householdTasteProfile, copilotSessions, activityLog, mealReactions,
+  snackWishlist, shoppingListItems
 } from "@shared/schema";
 import type {
   Recipe, InsertRecipe, WeeklyPlan, InsertWeeklyPlan,
   PantryStaple, InsertPantryStaple, User, InsertUser,
   UserPreference, UserTasteProfile as DbUserTasteProfile, CopilotSession, ActivityLogEntry,
-  MealReaction, Household
+  MealReaction, Household, SnackWishlistItem, ShoppingListItem
 } from "@shared/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 
@@ -112,6 +113,21 @@ export interface IStorage {
   upsertReaction(weekStart: string, slotKey: string, userId: number, emoji: string): Promise<void>;
   deleteReaction(weekStart: string, slotKey: string, userId: number): Promise<void>;
   getReactionsForWeek(weekStart: string, householdId: number): Promise<MealReaction[]>;
+
+  // Snack Wishlist
+  getSnackWishlist(householdId: number): Promise<SnackWishlistItem[]>;
+  addSnackWishlistItem(householdId: number, userId: number, item: { name: string; brand?: string; notes?: string; imageUrl?: string; productData?: string }): Promise<SnackWishlistItem>;
+  deleteSnackWishlistItem(id: number, householdId: number): Promise<void>;
+
+  // Persistent Shopping List
+  getShoppingList(householdId: number): Promise<ShoppingListItem[]>;
+  addShoppingItem(householdId: number, userId: number, item: { name: string; amount?: string; unit?: string; category?: string; source?: string; sourceId?: number; productData?: string }): Promise<ShoppingListItem>;
+  bulkAddShoppingItems(householdId: number, userId: number, items: { name: string; amount?: string; unit?: string; category?: string; source?: string; sourceId?: number }[]): Promise<ShoppingListItem[]>;
+  toggleShoppingItem(id: number, householdId: number, userId: number, checked: boolean): Promise<ShoppingListItem | undefined>;
+  deleteShoppingItem(id: number, householdId: number): Promise<void>;
+  clearCheckedShoppingItems(householdId: number): Promise<void>;
+  clearAllShoppingItems(householdId: number): Promise<void>;
+  updateShoppingItemProduct(id: number, householdId: number, productData: string, imageUrl?: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -666,6 +682,97 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(mealReactions).where(
       and(eq(mealReactions.weekStart, weekStart), inArray(mealReactions.userId, userIds))
     );
+  }
+
+  // ── Snack Wishlist ─────────────────────────────────────────────────────────
+
+  async getSnackWishlist(householdId: number): Promise<SnackWishlistItem[]> {
+    return await db.select().from(snackWishlist)
+      .where(eq(snackWishlist.householdId, householdId))
+      .orderBy(snackWishlist.createdAt);
+  }
+
+  async addSnackWishlistItem(householdId: number, userId: number, item: { name: string; brand?: string; notes?: string; imageUrl?: string; productData?: string }): Promise<SnackWishlistItem> {
+    const rows = await db.insert(snackWishlist).values({
+      householdId,
+      addedBy: userId,
+      name: item.name,
+      brand: item.brand ?? null,
+      notes: item.notes ?? null,
+      imageUrl: item.imageUrl ?? null,
+      productData: item.productData ?? null,
+    }).returning();
+    return rows[0];
+  }
+
+  async deleteSnackWishlistItem(id: number, householdId: number): Promise<void> {
+    await db.delete(snackWishlist).where(and(eq(snackWishlist.id, id), eq(snackWishlist.householdId, householdId)));
+  }
+
+  // ── Persistent Shopping List ───────────────────────────────────────────────
+
+  async getShoppingList(householdId: number): Promise<ShoppingListItem[]> {
+    return await db.select().from(shoppingListItems)
+      .where(eq(shoppingListItems.householdId, householdId))
+      .orderBy(shoppingListItems.createdAt);
+  }
+
+  async addShoppingItem(householdId: number, userId: number, item: { name: string; amount?: string; unit?: string; category?: string; source?: string; sourceId?: number; productData?: string }): Promise<ShoppingListItem> {
+    const rows = await db.insert(shoppingListItems).values({
+      householdId,
+      addedBy: userId,
+      name: item.name,
+      amount: item.amount ?? null,
+      unit: item.unit ?? null,
+      category: item.category ?? "other",
+      source: item.source ?? "manual",
+      sourceId: item.sourceId ?? null,
+      productData: item.productData ?? null,
+    }).returning();
+    return rows[0];
+  }
+
+  async bulkAddShoppingItems(householdId: number, userId: number, items: { name: string; amount?: string; unit?: string; category?: string; source?: string; sourceId?: number }[]): Promise<ShoppingListItem[]> {
+    if (items.length === 0) return [];
+    const rows = await db.insert(shoppingListItems).values(
+      items.map(item => ({
+        householdId,
+        addedBy: userId,
+        name: item.name,
+        amount: item.amount ?? null,
+        unit: item.unit ?? null,
+        category: item.category ?? "other",
+        source: item.source ?? "manual",
+        sourceId: item.sourceId ?? null,
+      }))
+    ).returning();
+    return rows;
+  }
+
+  async toggleShoppingItem(id: number, householdId: number, userId: number, checked: boolean): Promise<ShoppingListItem | undefined> {
+    const rows = await db.update(shoppingListItems)
+      .set({ checked, checkedBy: checked ? userId : null, checkedAt: checked ? new Date() : null })
+      .where(and(eq(shoppingListItems.id, id), eq(shoppingListItems.householdId, householdId)))
+      .returning();
+    return rows[0];
+  }
+
+  async deleteShoppingItem(id: number, householdId: number): Promise<void> {
+    await db.delete(shoppingListItems).where(and(eq(shoppingListItems.id, id), eq(shoppingListItems.householdId, householdId)));
+  }
+
+  async clearCheckedShoppingItems(householdId: number): Promise<void> {
+    await db.delete(shoppingListItems).where(and(eq(shoppingListItems.householdId, householdId), eq(shoppingListItems.checked, true)));
+  }
+
+  async clearAllShoppingItems(householdId: number): Promise<void> {
+    await db.delete(shoppingListItems).where(eq(shoppingListItems.householdId, householdId));
+  }
+
+  async updateShoppingItemProduct(id: number, householdId: number, productData: string, imageUrl?: string): Promise<void> {
+    await db.update(shoppingListItems)
+      .set({ productData, ...(imageUrl ? {} : {}) } as any)
+      .where(and(eq(shoppingListItems.id, id), eq(shoppingListItems.householdId, householdId)));
   }
 }
 

@@ -5,6 +5,7 @@ import { setupAuth } from "./auth";
 import aiRoutes from "./routes/ai";
 import onboardingRoutes from "./routes/onboarding";
 import billingRoutes from "./routes/billing";
+import snacksRoutes from "./routes/snacks";
 import { requireAuth, isSafeUrl } from "./middleware/requireAuth";
 import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, type InsertWeeklyPlan } from "@shared/schema";
 import { guessCategory, guessCuisine } from "./utils/categorization";
@@ -146,6 +147,9 @@ export async function registerRoutes(server: Server, app: Express) {
 
   // Onboarding routes (all require auth)
   app.use("/api/onboarding", requireAuth, onboardingRoutes);
+
+  // Snacks & Shopping List
+  app.use("/api/snacks", snacksRoutes);
 
   // Initialize database and seed default data on first run
   await storage.init();

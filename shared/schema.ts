@@ -160,6 +160,37 @@ export const mealReactions = pgTable("meal_reactions", {
 }, (t) => ({ uniq: unique().on(t.weekStart, t.slotKey, t.userId) }));
 export type MealReaction = typeof mealReactions.$inferSelect;
 
+export const snackWishlist = pgTable("snack_wishlist", {
+  id: serial("id").primaryKey(),
+  householdId: integer("household_id").references(() => households.id).notNull(),
+  addedBy: integer("added_by").references(() => users.id),
+  name: text("name").notNull(),
+  brand: text("brand"),
+  notes: text("notes"),
+  imageUrl: text("image_url"),
+  productData: text("product_data"), // JSON from Open Food Facts
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type SnackWishlistItem = typeof snackWishlist.$inferSelect;
+
+export const shoppingListItems = pgTable("shopping_list_items", {
+  id: serial("id").primaryKey(),
+  householdId: integer("household_id").references(() => households.id).notNull(),
+  addedBy: integer("added_by").references(() => users.id),
+  name: text("name").notNull(),
+  amount: text("amount"),
+  unit: text("unit"),
+  category: text("category").notNull().default("other"),
+  checked: boolean("checked").notNull().default(false),
+  checkedBy: integer("checked_by").references(() => users.id),
+  checkedAt: timestamp("checked_at"),
+  source: text("source").default("manual"), // "recipe" | "wishlist" | "manual"
+  sourceId: integer("source_id"),
+  productData: text("product_data"), // JSON: { imageUrl, brand, offId }
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type ShoppingListItem = typeof shoppingListItems.$inferSelect;
+
 export const activityLog = pgTable("activity_log", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
