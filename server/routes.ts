@@ -10,6 +10,7 @@ import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, t
 import { guessCategory, guessCuisine } from "./utils/categorization";
 import { detectTags } from "./utils/autoTag";
 import { buildShoppingList } from "./utils/shoppingList";
+import { enrichWithNutrition } from "./services/spoonacular";
 
 /**
  * Parse an ISO 8601 duration (e.g. PT1H30M, PT45M, PT2H) into minutes.
@@ -222,6 +223,18 @@ export async function registerRoutes(server: Server, app: Express) {
     const recipe = await storage.createRecipe({ ...parsed.data, householdId });
     res.status(201).json(recipe);
     storage.logActivity((req.user as any).id, "recipe_added", recipe.id, recipe.name);
+
+    // Fire-and-forget nutrition enrichment — don't block the response
+    {
+      let ingredientNames: string[] = [];
+      try { ingredientNames = (JSON.parse(recipe.ingredients) as any[]).map(i => i.name).filter(Boolean); } catch { /* skip */ }
+      if (ingredientNames.length > 0) {
+        enrichWithNutrition(recipe.name, ingredientNames).then(nutrition => {
+          if (nutrition) storage.updateRecipeNutrition(recipe.id, JSON.stringify(nutrition)).catch(() => {});
+        }).catch(() => {});
+      }
+    }
+
     // Auto-clean instructions in background — best-effort, never blocks the response
     // Rate-limited: max 3 concurrent Anthropic calls to avoid burst costs
     if (!recipe.isProcessed && recipe.instructions && autoCleanActive < 3) {

@@ -307,6 +307,23 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
                 {tags.map(tag => <Badge key={tag} variant="outline" className="text-xs capitalize">{tag}</Badge>)}
               </div>
             )}
+
+            {/* Nutrition strip */}
+            {(() => {
+              try {
+                const n = recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null;
+                if (!n) return null;
+                return (
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-muted-foreground">
+                    <span><span className="font-medium text-foreground">{n.calories}</span> cal</span>
+                    <span><span className="font-medium text-foreground">{n.protein}</span> protein</span>
+                    <span><span className="font-medium text-foreground">{n.carbs}</span> carbs</span>
+                    <span><span className="font-medium text-foreground">{n.fat}</span> fat</span>
+                    {n.fiber && n.fiber !== '0g' && <span><span className="font-medium text-foreground">{n.fiber}</span> fiber</span>}
+                  </div>
+                );
+              } catch { return null; }
+            })()}
           </DialogHeader>
 
           <Separator className="my-4" />

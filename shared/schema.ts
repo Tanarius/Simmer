@@ -58,6 +58,9 @@ export const recipes = pgTable("recipes", {
   totalPrepTime: integer('total_prep_time'),
   totalCookTime: integer('total_cook_time'),
   tips: text('tips').array().default([]),
+
+  // Nutrition data (JSON: { calories, protein, carbs, fat, fiber })
+  nutritionData: text('nutrition_data'),
 });
 
 export const weeklyPlans = pgTable("weekly_plans", {

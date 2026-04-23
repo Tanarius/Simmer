@@ -89,6 +89,7 @@ export interface IStorage {
   getRecipe(id: number, householdId?: number): Promise<Recipe | undefined>;
   createRecipe(recipe: InsertRecipe): Promise<Recipe>;
   updateRecipe(id: number, householdId: number, recipe: Partial<InsertRecipe>): Promise<Recipe | undefined>;
+  updateRecipeNutrition(id: number, nutritionJson: string): Promise<void>;
   deleteRecipe(id: number, householdId: number): Promise<void>;
   toggleFavorite(id: number, householdId: number): Promise<Recipe | undefined>;
 
@@ -543,6 +544,10 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(recipes.id, id), eq(recipes.householdId, householdId)))
       .returning();
     return rows[0];
+  }
+
+  async updateRecipeNutrition(id: number, nutritionJson: string): Promise<void> {
+    await db.update(recipes).set({ nutritionData: nutritionJson } as any).where(eq(recipes.id, id));
   }
 
   async deleteRecipe(id: number, householdId: number): Promise<void> {

@@ -8,7 +8,7 @@ import {
 } from "../services/anthropic";
 import { chatWithCopilot } from "../services/copilot";
 import { cleanRecipe } from "../services/recipeCleaner";
-import { searchRecipesForCopilot, type SpoonacularRecipe } from "../services/spoonacular";
+import { searchRecipesForCopilot, enrichWithNutrition, type SpoonacularRecipe } from "../services/spoonacular";
 import { storage } from "../storage";
 import { z } from "zod";
 import { aiCache, TTL_24H } from "../utils/cache";
@@ -241,6 +241,14 @@ router.post("/copilot/save-recipe", async (req, res, next) => {
 
     storage.logActivity((req.user as any).id, "recipe_added", saved.id, saved.name);
     res.json({ success: true, recipe: saved });
+
+    // Fire-and-forget nutrition enrichment — don't block the response
+    const ingredientNames = ingredients.map(i => i.name);
+    enrichWithNutrition(recipe.title, ingredientNames).then(nutrition => {
+      if (nutrition) {
+        storage.updateRecipeNutrition(saved.id, JSON.stringify(nutrition)).catch(() => {});
+      }
+    }).catch(() => {});
   } catch (err) {
     next(err);
   }
