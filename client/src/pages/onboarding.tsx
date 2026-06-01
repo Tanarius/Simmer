@@ -36,7 +36,7 @@ const COOKING_STYLES = [
   },
   {
     value: "meal-prep",
-    label: "Meal Prep",
+    label: "Batch Cooking",
     emoji: "📦",
     desc: "Batch cook on weekends. One big cook feeds you all week — we'll plan your portions day by day.",
   },
@@ -81,7 +81,7 @@ export default function OnboardingPage() {
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-7 w-7 animate-spin text-violet-500" />
+        <Loader2 className="h-7 w-7 animate-spin text-orange-500" />
       </div>
     );
   }
@@ -154,7 +154,7 @@ export default function OnboardingPage() {
               key={i}
               className={cn(
                 "h-1.5 flex-1 rounded-full transition-all duration-300",
-                i < step ? "bg-violet-600" : "bg-muted"
+                i < step ? "bg-[#C96A3A]" : "bg-muted"
               )}
             />
           ))}
@@ -172,7 +172,7 @@ export default function OnboardingPage() {
             {/* Step 1 — Household */}
             {step === 1 && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
                   Step 1 of {TOTAL_STEPS}
                 </p>
                 <h1 className="text-2xl font-bold mb-1">Who are you cooking for?</h1>
@@ -185,8 +185,8 @@ export default function OnboardingPage() {
                       className={cn(
                         "flex flex-col items-center gap-2 p-5 rounded-xl border-2 transition-all",
                         householdSize === opt.value
-                          ? "border-violet-500 bg-violet-500/10"
-                          : "border-border bg-card hover:border-violet-500/40"
+                          ? "border-orange-500 bg-orange-500/10"
+                          : "border-border bg-card hover:border-orange-500/40"
                       )}
                     >
                       <span className="text-3xl">{opt.emoji}</span>
@@ -201,7 +201,7 @@ export default function OnboardingPage() {
             {/* Step 2 — Cooking style */}
             {step === 2 && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
                   Step 2 of {TOTAL_STEPS}
                 </p>
                 <h1 className="text-2xl font-bold mb-1">How do you like to cook?</h1>
@@ -216,8 +216,8 @@ export default function OnboardingPage() {
                         className={cn(
                           "w-full flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all",
                           selected
-                            ? "border-violet-500 bg-violet-500/10"
-                            : "border-border bg-card hover:border-violet-500/40"
+                            ? "border-orange-500 bg-orange-500/10"
+                            : "border-border bg-card hover:border-orange-500/40"
                         )}
                       >
                         <span className="text-2xl shrink-0 mt-0.5">{opt.emoji}</span>
@@ -225,7 +225,7 @@ export default function OnboardingPage() {
                           <p className="font-semibold text-sm">{opt.label}</p>
                           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{opt.desc}</p>
                         </div>
-                        {selected && <Check className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />}
+                        {selected && <Check className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />}
                       </button>
                     );
                   })}
@@ -236,7 +236,7 @@ export default function OnboardingPage() {
             {/* Step 3 — Cuisines */}
             {step === 3 && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
                   Step 3 of {TOTAL_STEPS}
                 </p>
                 <h1 className="text-2xl font-bold mb-1">What cuisines do you love?</h1>
@@ -251,13 +251,13 @@ export default function OnboardingPage() {
                         className={cn(
                           "flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all",
                           selected
-                            ? "border-violet-500 bg-violet-500/10"
-                            : "border-border bg-card hover:border-violet-500/40"
+                            ? "border-orange-500 bg-orange-500/10"
+                            : "border-border bg-card hover:border-orange-500/40"
                         )}
                       >
                         <span className="text-xl">{c.emoji}</span>
                         <span className="text-sm font-medium">{c.label}</span>
-                        {selected && <Check className="h-3.5 w-3.5 text-violet-500 ml-auto shrink-0" />}
+                        {selected && <Check className="h-3.5 w-3.5 text-orange-500 ml-auto shrink-0" />}
                       </button>
                     );
                   })}
@@ -268,7 +268,7 @@ export default function OnboardingPage() {
             {/* Step 4 — Dietary */}
             {step === 4 && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
                   Step 4 of {TOTAL_STEPS}
                 </p>
                 <h1 className="text-2xl font-bold mb-1">Any dietary needs?</h1>
@@ -283,8 +283,8 @@ export default function OnboardingPage() {
                         className={cn(
                           "px-4 py-2.5 rounded-full border-2 text-sm font-medium transition-all",
                           selected
-                            ? "border-violet-500 bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                            : "border-border bg-card hover:border-violet-500/40"
+                            ? "border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                            : "border-border bg-card hover:border-orange-500/40"
                         )}
                       >
                         {opt.label}
@@ -310,7 +310,7 @@ export default function OnboardingPage() {
           <Button
             onClick={next}
             disabled={!canNext || saving}
-            className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white gap-1.5 min-w-[120px]"
+            className="bg-gradient-to-r bg-[#C96A3A] hover:bg-[#A85530] text-white gap-1.5 min-w-[120px]"
           >
             {saving ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>

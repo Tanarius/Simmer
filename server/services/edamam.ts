@@ -55,9 +55,11 @@ function parseEdamamRecipe(hit: any): SpoonacularRecipe {
     original: i.text,
   }));
 
-  // Edamam doesn't expose full step-by-step instructions; use ingredientLines as fallback
-  // The source URL always points to the original recipe with instructions.
-  const instructions: string[] = [];
+  // Edamam doesn't expose step-by-step instructions in their API response.
+  // Insert a single step linking to the source so saved recipes aren't blank.
+  const instructions: string[] = r.url
+    ? [`Full cooking instructions available at the source link above.`]
+    : [];
 
   return {
     id,

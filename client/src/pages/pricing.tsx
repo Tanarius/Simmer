@@ -15,20 +15,20 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-full bg-[#0a0a0c] selection:bg-purple-500/30 text-white pb-20">
+    <div className="min-h-full bg-[#0a0a0c] selection:bg-orange-500/30 text-white pb-20">
       {/* Hero Section */}
       <div className="relative pt-20 pb-16 md:pt-32 md:pb-24 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/40 via-[#0a0a0c] to-[#0a0a0c] pointer-events-none" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-orange-900/30 via-[#0a0a0c] to-[#0a0a0c] pointer-events-none" />
         <div className="relative max-w-5xl mx-auto px-4 md:px-6 text-center z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-sm font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-300 text-sm font-medium mb-6">
             <Sparkles className="w-4 h-4" />
-            <span>Elevate Your Meal Planning</span>
+            <span>Good things simmer.</span>
           </div>
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-400">
             Smarter planning for your household
           </h1>
           <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto">
-            Get intelligent recipe suggestions, optimize your grocery trips, and automate your week with MealPrep's AI-powered features.
+            Get intelligent recipe suggestions, optimize your grocery trips, and automate your week with Simmer's AI-powered features.
           </p>
         </div>
       </div>
@@ -49,7 +49,7 @@ export default function PricingPage() {
             </div>
             <ul className="space-y-4 mb-8 flex-1">
               {[
-                { label: "5 AI requests per day", icon: <Zap className="w-5 h-5 text-gray-400" /> },
+                { label: "10 AI requests per day", icon: <Zap className="w-5 h-5 text-gray-400" /> },
                 { label: "Shared household pantry", icon: <Utensils className="w-5 h-5 text-gray-400" /> },
                 { label: "Manual weekly planner", icon: <CalendarDays className="w-5 h-5 text-gray-400" /> },
                 { label: "Basic shopping list", icon: <ShoppingCart className="w-5 h-5 text-gray-400" /> },
@@ -71,27 +71,27 @@ export default function PricingPage() {
           </div>
 
           {/* Premium Tier */}
-          <div className="relative flex flex-col p-8 rounded-3xl bg-gradient-to-b from-purple-900/50 to-black border border-purple-500/30 shadow-[0_0_40px_-10px_rgba(147,51,234,0.3)]">
+          <div className="relative flex flex-col p-8 rounded-3xl bg-gradient-to-b from-orange-900/40 to-black border border-orange-500/30 shadow-[0_0_40px_-10px_rgba(201,106,58,0.3)]">
             <div className="absolute top-0 right-8 transform -translate-y-1/2">
-              <span className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              <span className="bg-[#C96A3A] text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                 Most Popular
               </span>
             </div>
             <div className="mb-8">
               <h3 className="text-2xl font-bold text-white mb-2">Premium</h3>
-              <p className="text-purple-200">The ultimate AI meal planning assistant.</p>
+              <p className="text-orange-200">The ultimate AI meal planning assistant.</p>
               <div className="mt-6 flex items-baseline gap-1">
                 <span className="text-5xl font-extrabold tracking-tight text-white">$4.99</span>
-                <span className="text-purple-300/60 font-medium">/month</span>
+                <span className="text-orange-300/60 font-medium">/month</span>
               </div>
             </div>
             <ul className="space-y-4 mb-8 flex-1">
               {[
-                { label: "Unlimited AI requests", icon: <Sparkles className="w-5 h-5 text-purple-400" /> },
-                { label: "Generate 1-click weekly plans", icon: <Sparkles className="w-5 h-5 text-purple-400" /> },
-                { label: "AI auto-categorized groceries", icon: <Sparkles className="w-5 h-5 text-purple-400" /> },
-                { label: "Nutrition & macros data", icon: <Check className="w-5 h-5 text-purple-400" /> },
-                { label: "Priority recipe suggestions", icon: <Check className="w-5 h-5 text-purple-400" /> },
+                { label: "Unlimited AI requests", icon: <Sparkles className="w-5 h-5 text-orange-400" /> },
+                { label: "Generate 1-click weekly plans", icon: <Sparkles className="w-5 h-5 text-orange-400" /> },
+                { label: "AI auto-categorized groceries", icon: <Sparkles className="w-5 h-5 text-orange-400" /> },
+                { label: "Nutrition & macros data", icon: <Check className="w-5 h-5 text-orange-400" /> },
+                { label: "Priority recipe suggestions", icon: <Check className="w-5 h-5 text-orange-400" /> },
               ].map((feat, i) => (
                 <li key={i} className="flex items-center gap-3 text-white font-medium">
                   {feat.icon}
@@ -99,8 +99,8 @@ export default function PricingPage() {
                 </li>
               ))}
             </ul>
-            <Button 
-              className="w-full py-6 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-lg hover:scale-[1.02] transition-all shadow-lg shadow-purple-900/50 border-0"
+            <Button
+              className="w-full py-6 rounded-xl bg-[#C96A3A] hover:bg-[#A85530] text-white font-semibold text-lg hover:scale-[1.02] transition-all shadow-lg border-0"
               onClick={handleUpgrade}
             >
               Get Premium

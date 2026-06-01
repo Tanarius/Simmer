@@ -42,7 +42,7 @@ export async function chatWithCopilot(
   const recentHistory = history.reverse();
 
   // 3. Construct system prompt
-  const systemPrompt = `You are the MealPrep Kitchen Copilot, an expert culinary assistant deeply integrated into the user's digital kitchen.
+  const systemPrompt = `You are the Simmer Kitchen Copilot, an expert culinary assistant deeply integrated into the user's digital kitchen.
 
 CURRENT STATE:
 User's Household Taste Profile:

@@ -40,6 +40,7 @@ export interface IStorage {
   updateUserPassword(userId: number, hashedPassword: string): Promise<void>;
   getUserByEmail(email: string): Promise<User | undefined>;
   setUserEmail(userId: number, email: string): Promise<void>;
+  setUserAvatar(userId: number, avatar: string): Promise<void>;
   setResetToken(userId: number, token: string, expiry: Date): Promise<void>;
   getUserByResetToken(token: string): Promise<User | undefined>;
   clearResetToken(userId: number): Promise<void>;
@@ -88,6 +89,7 @@ export interface IStorage {
   // Recipes & Plans
   getRecipes(householdId: number): Promise<Recipe[]>;
   getRecipe(id: number, householdId?: number): Promise<Recipe | undefined>;
+  getRecipesByIds(ids: number[], householdId: number): Promise<Recipe[]>;
   createRecipe(recipe: InsertRecipe): Promise<Recipe>;
   updateRecipe(id: number, householdId: number, recipe: Partial<InsertRecipe>): Promise<Recipe | undefined>;
   updateRecipeNutrition(id: number, nutritionJson: string): Promise<void>;
@@ -107,7 +109,7 @@ export interface IStorage {
 
   // Activity Feed
   logActivity(userId: number, action: string, recipeId?: number | null, recipeName?: string | null): Promise<void>;
-  getRecentActivity(householdId: number, limit?: number): Promise<(ActivityLogEntry & { username: string })[]>;
+  getRecentActivity(householdId: number, limit?: number): Promise<(ActivityLogEntry & { username: string; avatar: string | null })[]>;
 
   // Meal Reactions
   upsertReaction(weekStart: string, slotKey: string, userId: number, emoji: string): Promise<void>;
@@ -127,6 +129,7 @@ export interface IStorage {
   deleteShoppingItem(id: number, householdId: number): Promise<void>;
   clearCheckedShoppingItems(householdId: number): Promise<void>;
   clearAllShoppingItems(householdId: number): Promise<void>;
+  clearRecipeShoppingItems(householdId: number): Promise<void>;
   updateShoppingItemProduct(id: number, householdId: number, productData: string, imageUrl?: string): Promise<void>;
 }
 
@@ -190,6 +193,14 @@ export class DatabaseStorage implements IStorage {
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS meal_reactions_week_idx ON meal_reactions(week_start)`);
+
+    // Performance indexes
+    await pool.query(`CREATE INDEX IF NOT EXISTS onboarding_swipes_user_idx ON onboarding_swipes(user_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS copilot_sessions_user_session_idx ON copilot_sessions(user_id, session_id, timestamp DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS recipes_cuisine_difficulty_idx ON recipes(cuisine_type, difficulty)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS users_ai_reset_idx ON users(id, ai_calls_reset_date)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS shopping_list_items_household_checked_idx ON shopping_list_items(household_id, checked)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS activity_log_user_created_idx ON activity_log(user_id, created_at DESC)`);
   }
 
   // Households
@@ -235,6 +246,10 @@ export class DatabaseStorage implements IStorage {
 
   async setUserEmail(userId: number, email: string): Promise<void> {
     await db.update(users).set({ email }).where(eq(users.id, userId));
+  }
+
+  async setUserAvatar(userId: number, avatar: string): Promise<void> {
+    await db.update(users).set({ avatar } as any).where(eq(users.id, userId));
   }
 
   async setResetToken(userId: number, token: string, expiry: Date): Promise<void> {
@@ -456,8 +471,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllHouseholdMemberProfiles(householdId: number) {
-    // For now householdId is userId mapping
-    return await db.select().from(userTasteProfile);
+    const members = await this.getHouseholdMembers(householdId);
+    if (members.length === 0) return [];
+    const memberIds = members.map(m => m.id);
+    return await db.select().from(userTasteProfile).where(inArray(userTasteProfile.userId, memberIds));
   }
 
   async incrementCuisineSignal(userId: number, cuisineType: string): Promise<void> {
@@ -483,22 +500,23 @@ export class DatabaseStorage implements IStorage {
     const plans = await db.select().from(weeklyPlans)
       .where(eq(weeklyPlans.householdId, householdId))
       .orderBy(desc(weeklyPlans.id)).limit(4);
-    const names: string[] = [];
+    const nameSet = new Set<string>();
+    const recipeIdSet = new Set<number>();
     for (const plan of plans) {
       try {
         const meals = JSON.parse(plan.meals) as Record<string, number | string>;
         for (const val of Object.values(meals)) {
           if (!val) continue;
-          if (typeof val === 'string') {
-            if (!names.includes(val)) names.push(val);
-          } else if (typeof val === 'number') {
-            const recipe = await this.getRecipe(val, householdId);
-            if (recipe && !names.includes(recipe.name)) names.push(recipe.name);
-          }
+          if (typeof val === 'string') nameSet.add(val);
+          else if (typeof val === 'number') recipeIdSet.add(val);
         }
       } catch { /* skip malformed */ }
     }
-    return names.slice(0, limit);
+    if (recipeIdSet.size > 0) {
+      const recipes = await this.getRecipesByIds([...recipeIdSet], householdId);
+      for (const r of recipes) nameSet.add(r.name);
+    }
+    return [...nameSet].slice(0, limit);
   }
 
   // Copilot History
@@ -548,6 +566,13 @@ export class DatabaseStorage implements IStorage {
       : eq(recipes.id, id);
     const rows = await db.select().from(recipes).where(condition);
     return rows[0];
+  }
+
+  async getRecipesByIds(ids: number[], householdId: number): Promise<Recipe[]> {
+    if (ids.length === 0) return [];
+    return db.select().from(recipes).where(
+      and(inArray(recipes.id, ids), eq(recipes.householdId, householdId))
+    );
   }
 
   async createRecipe(recipe: InsertRecipe): Promise<Recipe> {
@@ -639,7 +664,7 @@ export class DatabaseStorage implements IStorage {
     await db.insert(activityLog).values({ userId, action, recipeId: recipeId ?? null, recipeName: recipeName ?? null });
   }
 
-  async getRecentActivity(householdId: number, limit = 40): Promise<(ActivityLogEntry & { username: string })[]> {
+  async getRecentActivity(householdId: number, limit = 40): Promise<(ActivityLogEntry & { username: string; avatar: string | null })[]> {
     // Get user IDs for this household, then filter activity log
     const members = await this.getHouseholdMembers(householdId);
     const memberIds = members.map(m => m.id);
@@ -650,8 +675,14 @@ export class DatabaseStorage implements IStorage {
         : inArray(activityLog.userId, memberIds))
       .orderBy(desc(activityLog.createdAt))
       .limit(limit);
-    const userMap = new Map<number, string>(members.map(m => [m.id, m.username]));
-    return rows.map(r => ({ ...r, username: userMap.get(r.userId) ?? "Someone" }));
+    const userMap = new Map<number, { username: string; avatar: string | null }>(
+      members.map(m => [m.id, { username: m.username, avatar: (m as any).avatar ?? null }])
+    );
+    return rows.map(r => ({
+      ...r,
+      username: userMap.get(r.userId)?.username ?? "Someone",
+      avatar: userMap.get(r.userId)?.avatar ?? null,
+    }));
   }
 
   async upsertReaction(weekStart: string, slotKey: string, userId: number, emoji: string): Promise<void> {
@@ -767,6 +798,12 @@ export class DatabaseStorage implements IStorage {
 
   async clearAllShoppingItems(householdId: number): Promise<void> {
     await db.delete(shoppingListItems).where(eq(shoppingListItems.householdId, householdId));
+  }
+
+  async clearRecipeShoppingItems(householdId: number): Promise<void> {
+    await db.delete(shoppingListItems).where(
+      and(eq(shoppingListItems.householdId, householdId), eq(shoppingListItems.source, "recipe"))
+    );
   }
 
   async updateShoppingItemProduct(id: number, householdId: number, productData: string, imageUrl?: string): Promise<void> {

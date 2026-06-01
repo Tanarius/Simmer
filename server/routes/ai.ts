@@ -10,9 +10,9 @@ import { chatWithCopilot } from "../services/copilot";
 import { cleanRecipe } from "../services/recipeCleaner";
 import { searchRecipesForCopilot, enrichWithNutrition, type SpoonacularRecipe } from "../services/spoonacular";
 import { storage } from "../storage";
-import { z } from "zod";
 import { aiCache, TTL_24H } from "../utils/cache";
 import { detectTags } from "../utils/autoTag";
+import { guessCuisine } from "../utils/categorization";
 
 function getAiCallsRemaining(tier: string, callsToday: number): number {
   if (tier === 'premium') return 9999;
@@ -57,7 +57,7 @@ router.get("/copilot/history/:sessionId", async (req, res, next) => {
   }
 });
 
-router.post("/copilot/execute-tool", async (req, res, next) => {
+router.post("/copilot/execute-tool", copilotRateLimit, async (req, res, next) => {
   try {
     const { sessionId, messageId, action, status } = req.body; // status: 'applied' | 'dismissed'
     
@@ -147,9 +147,31 @@ router.post("/copilot/execute-tool", async (req, res, next) => {
           });
           return res.json({ success: true, message: `Added to ${p.dayOfWeek} ${p.mealType}` });
 
-        case 'optimize_shopping_list':
-          // Here we would append to a concrete shopping_lists table.
-          return res.json({ success: true, message: `Added items to your list` });
+        case 'add_to_shopping_list': {
+          const rawItems: string[] = Array.isArray(p.items) ? p.items : [];
+          if (rawItems.length === 0) {
+            return res.json({ success: true, message: "No items to add." });
+          }
+          const amountUnitRe = /^([\d./\s½⅓¼¾⅔⅛]+)\s*(cups?|tablespoons?|tbsp|teaspoons?|tsp|pounds?|lbs?|ounces?|oz|grams?|g|kg|cloves?|slices?|pieces?|cans?|whole|large|medium|small|bunch|stalks?|sprigs?|handfuls?)\.?\s*/i;
+          const parsed = rawItems.map(raw => {
+            const match = raw.match(amountUnitRe);
+            if (match) {
+              return {
+                name: raw.slice(match[0].length).replace(/^,\s*/, '').trim() || raw,
+                amount: match[1].trim(),
+                unit: match[2].toLowerCase().replace(/s$/, ''),
+                source: 'copilot' as const,
+              };
+            }
+            return { name: raw.trim(), source: 'copilot' as const };
+          });
+          await storage.bulkAddShoppingItems(
+            (req.user as any).householdId,
+            (req.user as any).id,
+            parsed
+          );
+          return res.json({ success: true, message: `Added ${parsed.length} item${parsed.length === 1 ? '' : 's'} to your shopping list.` });
+        }
       }
     }
 
@@ -188,7 +210,7 @@ router.post("/copilot/find-recipes", copilotRateLimit, async (req, res, next) =>
 });
 
 // Save a Spoonacular recipe to the user's library directly (no AI execute-tool needed)
-router.post("/copilot/save-recipe", async (req, res, next) => {
+router.post("/copilot/save-recipe", copilotRateLimit, async (req, res, next) => {
   try {
     const { recipe }: { recipe: SpoonacularRecipe } = req.body;
     if (!recipe?.title) return res.status(400).json({ error: "Recipe data required" });
@@ -200,19 +222,9 @@ router.post("/copilot/save-recipe", async (req, res, next) => {
       category: 'other',
     }));
 
-    // Normalize cuisine — try Spoonacular array first, fall back to keyword inference
-    const rawCuisine = (recipe.cuisines?.[0] ?? '').toLowerCase();
-    function normalizeCuisine(raw: string, title: string): string {
-      const blob = raw + ' ' + title.toLowerCase();
-      if (/chinese|japanese|korean|thai|vietnamese|asian|stir.?fry|ramen|pho|wok|sesame|soy sauce|hoisin|miso|yakitori|teriyaki|bulgogi|kimchi|pad thai|fried rice/.test(blob)) return 'asian';
-      if (/indian|tikka|masala|curry|biryani|tandoori|naan|paneer|dal|chutney|garam/.test(blob)) return 'indian';
-      if (/mexican|tex.?mex|latin|spanish|taco|enchilada|burrito|fajita|carnitas|quesadilla|chipotle|jalap/.test(blob)) return 'tex-mex';
-      if (/italian|pasta|pizza|risotto|penne|lasagna|parmesan|mozzarella|prosciutto|gnocchi|pesto/.test(blob)) return 'italian';
-      if (/mediterranean|greek|turkish|moroccan|lebanese|hummus|falafel|gyro|kebab|feta|couscous|tzatziki/.test(blob)) return 'mediterranean';
-      if (/american|southern|cajun|bbq|barbecue|comfort|burger|meatloaf|mac.?and.?cheese|pot roast|tater tot|casserole|chicken and dump|pulled pork|sloppy joe|wild rice|pot pie|clam chowder|buffalo wing/.test(blob)) return 'american';
-      return 'other';
-    }
-    const cuisineNorm = normalizeCuisine(rawCuisine, recipe.title);
+    // Normalize cuisine — pass Spoonacular hint + title to shared guessCuisine util
+    const rawCuisine = recipe.cuisines?.[0] ?? '';
+    const cuisineNorm = guessCuisine(recipe.title, [rawCuisine]);
 
     const mealType = recipe.dishTypes?.includes('breakfast') ? 'breakfast'
       : recipe.dishTypes?.includes('lunch') ? 'lunch'

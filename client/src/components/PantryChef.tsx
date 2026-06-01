@@ -58,21 +58,21 @@ export function PantryChef() {
   });
 
   return (
-    <div className="bg-gradient-to-br from-purple-900/40 to-indigo-900/40 border border-purple-500/20 rounded-xl p-5 mb-6">
+    <div className="bg-gradient-to-br from-orange-900/30 to-amber-900/30 border border-orange-500/20 rounded-xl p-5 mb-6">
       <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg font-bold text-purple-100 flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-400" />
+          <h2 className="text-lg font-bold text-orange-100 flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-orange-400" />
             Pantry Chef
           </h2>
-          <p className="text-sm text-purple-200/70 mt-1">Let AI suggest what to cook based on your pantry staples and recent taste profile.</p>
+          <p className="text-sm text-orange-200/70 mt-1">Let AI suggest what to cook based on your pantry staples and recent taste profile.</p>
         </div>
         
         <div className="flex items-center gap-2 w-full md:w-auto">
           <select 
             value={preferences}
             onChange={(e) => setPreferences(e.target.value)}
-            className="flex h-9 w-full md:w-[150px] rounded-md border border-purple-500/30 bg-purple-950/50 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-purple-500 text-purple-100"
+            className="flex h-9 w-full md:w-[150px] rounded-md border border-orange-500/30 bg-orange-950/50 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-orange-500 text-orange-100"
           >
             <option value="quick meal">Quick Meal</option>
             <option value="healthy">Healthy</option>
@@ -82,7 +82,7 @@ export function PantryChef() {
           <Button 
             onClick={() => suggestMutation.mutate(preferences)}
             disabled={suggestMutation.isPending}
-            className="bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-900/50 whitespace-nowrap shrink-0"
+            className="bg-[#C96A3A] hover:bg-[#A85530] text-white shadow-md whitespace-nowrap shrink-0"
           >
             {suggestMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ChefHat className="h-4 w-4 mr-2" />}
             Generate
@@ -96,7 +96,7 @@ export function PantryChef() {
             <div key={idx} className="bg-card border border-border p-4 rounded-lg flex flex-col gap-2">
               <div className="flex justify-between items-start">
                 <h3 className="font-semibold text-foreground leading-tight">{recipe.name}</h3>
-                <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 border-none shrink-0">{recipe.matchScore || "Great Match"}</Badge>
+                <Badge variant="secondary" className="bg-orange-500/20 text-orange-300 border-none shrink-0">{recipe.matchScore || "Great Match"}</Badge>
               </div>
               <p className="text-xs text-muted-foreground line-clamp-2">{recipe.reasoning || recipe.description || "Perfect for your preferences."}</p>
               
@@ -107,7 +107,7 @@ export function PantryChef() {
                  <Button 
                     variant="outline" 
                     size="sm" 
-                    className="h-7 text-xs border-purple-500/30 hover:bg-purple-500/10"
+                    className="h-7 text-xs border-orange-500/30 hover:bg-orange-500/10"
                     onClick={() => saveRecipeMutation.mutate(recipe)}
                     disabled={saveRecipeMutation.isPending}
                  >

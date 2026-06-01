@@ -7,11 +7,11 @@ import onboardingRoutes from "./routes/onboarding";
 import billingRoutes from "./routes/billing";
 import snacksRoutes from "./routes/snacks";
 import { requireAuth, isSafeUrl } from "./middleware/requireAuth";
-import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, type InsertWeeklyPlan } from "@shared/schema";
+import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, updateUserTasteProfileSchema, type InsertWeeklyPlan } from "@shared/schema";
 import { guessCategory, guessCuisine } from "./utils/categorization";
 import { detectTags } from "./utils/autoTag";
 import { buildShoppingList } from "./utils/shoppingList";
-import { enrichWithNutrition } from "./services/spoonacular";
+import { enrichWithNutrition, extractRecipeByUrl } from "./services/spoonacular";
 
 /**
  * Parse an ISO 8601 duration (e.g. PT1H30M, PT45M, PT2H) into minutes.
@@ -131,6 +131,47 @@ function cleanImportedText(text: string): string {
     .trim();
 }
 
+// Detect placeholder instruction text that some sites put in their JSON-LD
+// (e.g. "Full recipe on source site", "See instructions at foodista.com")
+const PLACEHOLDER_PATTERNS = [
+  /full\s*(recipe\s*)?(instructions?\s*)?on\s*(the\s*)?(source|original)\s*site/i,
+  /see\s+(full\s*)?(recipe|instructions?)\s*(on|at)/i,
+  /instructions?\s*(are\s*)?(available\s*)?(on|at)\s*(the\s*)?(source|original)\s*site/i,
+  /visit\s+(the\s*)?(original\s*)?site\s+for/i,
+  /full\s+recipe\s+at\s+\w/i,
+  /get\s+(the\s+)?full\s+recipe/i,
+  /find\s+(the\s+)?(full\s+)?recipe\s+(on|at)/i,
+  /directions?\s+at\s+(source|the)\s*site/i,
+];
+
+function isPlaceholderInstructions(instructions: string[]): boolean {
+  if (instructions.length === 0) return true;
+  const combined = instructions.join(" ");
+  if (combined.length > 400) return false; // real instructions are longer
+  return PLACEHOLDER_PATTERNS.some(p => p.test(combined));
+}
+
+// Extract instruction strings from a recipeInstructions JSON-LD field
+function extractInstructionsFromJsonLd(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((step: any) => {
+      if (typeof step === "string") return cleanImportedText(decodeHtmlEntities(step.replace(/<[^>]*>/g, "").trim()));
+      if (step.text) return cleanImportedText(decodeHtmlEntities(step.text.replace(/<[^>]*>/g, "").trim()));
+      if (step.itemListElement) {
+        return step.itemListElement.map((sub: any) =>
+          cleanImportedText(decodeHtmlEntities((sub.text || String(sub)).replace(/<[^>]*>/g, "").trim()))
+        ).join(" ");
+      }
+      return cleanImportedText(decodeHtmlEntities(String(step).replace(/<[^>]*>/g, "").trim()));
+    }).filter((s: string) => s.length > 0);
+  }
+  if (typeof raw === "string") {
+    return raw.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim()).map((s: string) => cleanImportedText(decodeHtmlEntities(s.trim())));
+  }
+  return [];
+}
+
 // Semaphore: max concurrent background recipe-clean Anthropic calls
 let autoCleanActive = 0;
 
@@ -162,7 +203,7 @@ export async function registerRoutes(server: Server, app: Express) {
     if (!url || !isSafeUrl(url)) return res.json({ imageUrl: null });
     try {
       const response = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; MealPrepApp/1.0; +https://mealprep.app)" },
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SimmerApp/1.0; +https://simmer.app)" },
         signal: AbortSignal.timeout(6000),
       });
       const html = await response.text();
@@ -201,7 +242,11 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.patch("/api/taste-profile", requireAuth, async (req, res) => {
-    await storage.upsertUserTasteProfile((req.user as any).id, req.body);
+    const result = updateUserTasteProfileSchema.safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json({ error: "Invalid taste profile data", details: result.error.flatten() });
+    }
+    await storage.upsertUserTasteProfile((req.user as any).id, result.data);
     res.json({ success: true });
   });
 
@@ -241,14 +286,52 @@ export async function registerRoutes(server: Server, app: Express) {
 
     // Auto-clean instructions in background — best-effort, never blocks the response
     // Rate-limited: max 3 concurrent Anthropic calls to avoid burst costs
-    if (!recipe.isProcessed && recipe.instructions && autoCleanActive < 3) {
+    if (!recipe.isProcessed && autoCleanActive < 3) {
       autoCleanActive++;
       setImmediate(async () => {
         try {
           const { cleanRecipe } = await import('./services/recipeCleaner');
           let ingredientsParsed: any[] = [];
           try { ingredientsParsed = JSON.parse(recipe.ingredients); } catch { /* skip */ }
-          const cleaned = await cleanRecipe({ name: recipe.name, ingredients: ingredientsParsed, instructions: recipe.instructions || '' });
+
+          // Detect placeholder / empty instructions — if so, try re-fetching the source URL
+          let rawInstructions = recipe.instructions || '';
+          let parsedInstructions: string[] = [];
+          try { parsedInstructions = JSON.parse(rawInstructions); } catch {
+            parsedInstructions = rawInstructions ? [rawInstructions] : [];
+          }
+
+          if (isPlaceholderInstructions(parsedInstructions) && recipe.sourceUrl) {
+            try {
+              console.log(`[auto-clean] instructions placeholder for recipe ${recipe.id}, re-fetching ${recipe.sourceUrl}`);
+              const freshHtml = await fetchHtml(recipe.sourceUrl);
+              // Try JSON-LD first
+              const jsonLd = extractRecipeJsonLd(freshHtml);
+              let freshInstructions = extractInstructionsFromJsonLd(jsonLd?.recipeInstructions);
+              // If still placeholder, try HTML fallback
+              if (isPlaceholderInstructions(freshInstructions)) {
+                const fallback = extractRecipeFallback(freshHtml);
+                const fb = Array.isArray(fallback?.recipeInstructions) ? fallback.recipeInstructions as string[] : [];
+                if (fb.length > 1 && !isPlaceholderInstructions(fb)) freshInstructions = fb;
+              }
+              if (!isPlaceholderInstructions(freshInstructions) && freshInstructions.length > 0) {
+                rawInstructions = JSON.stringify(freshInstructions);
+                parsedInstructions = freshInstructions;
+              } else {
+                console.warn(`[auto-clean] could not extract real instructions from ${recipe.sourceUrl}`);
+              }
+            } catch (fetchErr) {
+              console.warn(`[auto-clean] re-fetch failed for recipe ${recipe.id}:`, (fetchErr as any)?.message);
+            }
+          }
+
+          if (parsedInstructions.length === 0) {
+            // Nothing to clean — mark processed so we don't retry forever
+            await storage.updateRecipe(recipe.id, householdId, { isProcessed: true } as any);
+            return;
+          }
+
+          const cleaned = await cleanRecipe({ name: recipe.name, ingredients: ingredientsParsed, instructions: rawInstructions });
           const flatSteps = cleaned.sections.flatMap((s: any) => s.steps.map((st: any) => st.instruction ?? String(st)));
           await storage.updateRecipe(recipe.id, householdId, {
             isProcessed: true, rawInstructions: recipe.instructions,
@@ -301,8 +384,7 @@ export async function registerRoutes(server: Server, app: Express) {
     return true;
   }
 
-  app.get("/api/household", async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+  app.get("/api/household", requireAuth, async (req, res) => {
     const user = req.user as any;
     let householdId = user.householdId;
     // Auto-assign: if user somehow has no household (migration gap), create one now
@@ -318,8 +400,7 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ ...hh, members: members.map(m => ({ id: m.id, username: m.username })) });
   });
 
-  app.patch("/api/household/name", async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+  app.patch("/api/household/name", requireAuth, async (req, res) => {
     const user = req.user as any;
     if (!user.householdId) return res.status(404).json({ error: "No household" });
     const { name } = req.body;
@@ -328,10 +409,9 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ success: true });
   });
 
-  app.post("/api/household/join", async (req, res) => {
+  app.post("/api/household/join", requireAuth, async (req, res) => {
     const ip = (req.ip ?? req.socket.remoteAddress ?? "unknown");
     if (!checkJoinRate(ip)) return res.status(429).json({ error: "Too many attempts. Try again in a minute." });
-    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
     const user = req.user as any;
     const code = (req.body.inviteCode ?? "").trim().toUpperCase();
     if (!code || !/^[A-Z0-9]{8,20}$/.test(code)) return res.status(400).json({ error: "Invalid invite code format" });
@@ -353,8 +433,7 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // Regenerate invite code
-  app.post("/api/household/regenerate", async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/household/regenerate", requireAuth, async (req, res) => {
     const user = req.user as any;
     if (!user.householdId) return res.status(404).json({ error: "No household" });
     const { generateInviteCode } = await import("./utils/invite");
@@ -364,8 +443,7 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // Leave household (creates a new solo home)
-  app.post("/api/household/leave", async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/household/leave", requireAuth, async (req, res) => {
     const user = req.user as any;
     if (!user.householdId) return res.status(404).json({ error: "No household" });
     const { generateInviteCode } = await import("./utils/invite");
@@ -378,7 +456,7 @@ export async function registerRoutes(server: Server, app: Express) {
   // === ACTIVITY FEED ===
   app.get("/api/activity", requireAuth, async (req, res) => {
     interface ActivityGroup {
-      username: string; action: string; count: number;
+      username: string; avatar: string | null; action: string; count: number;
       recipeNames: string[]; recipeIds: number[]; latestAt: string;
     }
     const householdId = (req.user as any).householdId;
@@ -396,7 +474,7 @@ export async function registerRoutes(server: Server, app: Express) {
         }
       } else {
         groups.push({
-          username: row.username, action: row.action, count: 1,
+          username: row.username, avatar: row.avatar ?? null, action: row.action, count: 1,
           recipeNames: row.recipeName ? [row.recipeName] : [],
           recipeIds: row.recipeId ? [row.recipeId] : [],
           latestAt: row.createdAt.toISOString(),
@@ -509,18 +587,13 @@ export async function registerRoutes(server: Server, app: Express) {
   async function fetchHtml(url: string): Promise<string> {
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
-      "Accept-Encoding": "gzip, deflate, br",
       "Referer": "https://www.google.com/",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "cross-site",
-      "Sec-Fetch-User": "?1",
       "Upgrade-Insecure-Requests": "1",
     };
 
-    // Strategy 1: Direct fetch
+    let directHtml: string | null = null;
     try {
       const res = await fetch(url, {
         headers,
@@ -529,39 +602,18 @@ export async function registerRoutes(server: Server, app: Express) {
       });
       if (res.ok) {
         const html = await res.text();
-        if (html.includes("application/ld+json") || html.includes("recipeIngredient")) {
-          return html;
+        if (html.length > 500) {
+          // Return immediately when structured data is present
+          if (html.includes("application/ld+json") || html.includes("recipeIngredient")) return html;
+          directHtml = html; // keep as fallback for non-standard sites
         }
       }
     } catch {
-      // Direct fetch failed, try archive
+      // Site blocked or unreachable — caller will try Spoonacular extract next
     }
 
-    // Strategy 2: Internet Archive (Wayback Machine) — works for Cloudflare-protected sites
-    // like AllRecipes that block direct server requests
-    try {
-      const availRes = await fetch(
-        `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`,
-        { signal: AbortSignal.timeout(6000) }
-      );
-      if (availRes.ok) {
-        const availJson = await availRes.json() as any;
-        const snapshotUrl: string | undefined = availJson?.archived_snapshots?.closest?.url;
-        if (snapshotUrl) {
-          const res = await fetch(snapshotUrl, { headers, redirect: "follow", signal: AbortSignal.timeout(12000) });
-          if (res.ok) {
-            const html = await res.text();
-            if (html.includes("application/ld+json") || html.includes("recipeIngredient")) {
-              return html;
-            }
-          }
-        }
-      }
-    } catch {
-      // Archive fallback failed too
-    }
-
-    throw new Error("Could not reach this recipe site. The site may be blocking automated requests. Try copying the recipe details manually.");
+    if (directHtml) return directHtml;
+    throw new Error("Could not reach this recipe site.");
   }
 
   /**
@@ -689,81 +741,99 @@ export async function registerRoutes(server: Server, app: Express) {
     if (!url || !isSafeUrl(url)) return res.status(400).json({ error: "URL is required and must be a public URL" });
 
     try {
-      const html = await fetchHtml(url);
-      let recipeData = extractRecipeJsonLd(html);
+      // ── Strategy 1: Direct fetch + JSON-LD / HTML parsing ─────────────────
+      // Works for most recipe blogs and sites that serve server-rendered HTML.
+      let recipeData: any = null;
+      let html = "";
+      try {
+        html = await fetchHtml(url);
+        recipeData = extractRecipeJsonLd(html) ?? extractRecipeFallback(html);
+      } catch {
+        // Site blocked direct fetch — fall through to Spoonacular
+      }
 
-      // If JSON-LD extraction failed, try fallback HTML parsing
+      // ── Strategy 2: Spoonacular extract API ────────────────────────────────
+      // Handles Cloudflare-protected sites (AllRecipes, Food Network, Tasty,
+      // Serious Eats…) and any other site our server can't reach directly.
       if (!recipeData) {
-        recipeData = extractRecipeFallback(html);
+        const sp = await extractRecipeByUrl(url);
+        if (sp) {
+          // Map Spoonacular response directly to our response format and return
+          const spIngredients = sp.ingredients.map(i => ({
+            name: i.name,
+            amount: i.amount,
+            unit: i.unit,
+            category: guessCategory(i.original || i.name),
+          })).filter(i => i.name);
+
+          if (spIngredients.length === 0) {
+            return res.status(400).json({ error: "Found recipe but no ingredients could be extracted." });
+          }
+
+          const spInstructions = sp.instructions.filter(Boolean);
+          const totalTime = sp.readyInMinutes ?? 0;
+          const prepTime = totalTime > 0 ? Math.round(totalTime * 0.4) : 0;
+          const cookTime = totalTime > 0 ? Math.round(totalTime * 0.6) : 0;
+          const cuisine = guessCuisine(sp.title, [sp.cuisines?.[0] ?? ""]);
+          const tags = detectTags(sp.title, totalTime, sp.diets ?? []);
+          const mealType = sp.dishTypes?.includes("breakfast") ? "breakfast"
+            : sp.dishTypes?.includes("lunch") ? "lunch" : "dinner";
+
+          return res.json({
+            name: sp.title,
+            description: sp.summary.substring(0, 300),
+            cuisine,
+            mealType,
+            difficulty: totalTime > 60 || spInstructions.length > 8 ? "medium" : "easy",
+            prepTime,
+            cookTime,
+            servings: sp.servings,
+            ingredients: spIngredients,
+            instructions: spInstructions,
+            tags,
+            imageUrl: sp.imageUrl || null,
+            sourceUrl: sp.sourceUrl || url,
+          });
+        }
       }
 
       if (!recipeData) {
-        return res.status(400).json({ error: "Could not find recipe data on this page. The site may not include structured recipe data. Try copying the recipe details manually." });
+        return res.status(400).json({ error: "No recipe data found on this page. This site may use JavaScript rendering. Try pasting the recipe text using the 'Import from social/text' option instead." });
       }
 
-      // Extract fields from JSON-LD
+      // ── Parse JSON-LD / HTML-scraped data ──────────────────────────────────
       const name = cleanImportedText(decodeHtmlEntities((recipeData.name || "Imported Recipe").replace(/<[^>]*>/g, "")));
-      const description = cleanImportedText(decodeHtmlEntities((recipeData.description || "").replace(/<[^>]*>/g, ""))); // strip HTML tags + entities
+      const description = cleanImportedText(decodeHtmlEntities((recipeData.description || "").replace(/<[^>]*>/g, "")));
       const prepTime = parseDuration(recipeData.prepTime);
       const cookTime = parseDuration(recipeData.cookTime) || parseDuration(recipeData.totalTime);
       const servings = parseInt(recipeData.recipeYield?.[0] || recipeData.recipeYield || "3", 10) || 3;
 
-      // Parse ingredients
       const rawIngredients: string[] = recipeData.recipeIngredient || [];
-      if (rawIngredients.length === 0) {
-        console.warn(`No ingredients found for URL: ${url}`);
-      }
       const ingredients = rawIngredients.map((raw: string) => {
-        const clean = cleanImportedText(decodeHtmlEntities(raw.replace(/<[^>]*>/g, "").trim())); // strip HTML, decode entities, and clean references
+        const clean = cleanImportedText(decodeHtmlEntities(raw.replace(/<[^>]*>/g, "").trim()));
         const parsed = parseIngredientString(clean);
-        return {
-          name: parsed.name,
-          amount: parsed.amount,
-          unit: parsed.unit,
-          category: guessCategory(clean),
-        };
-      }).filter(ing => ing.name && ing.name.length > 0); // Filter out empty ingredients
+        return { name: parsed.name, amount: parsed.amount, unit: parsed.unit, category: guessCategory(clean) };
+      }).filter(ing => ing.name && ing.name.length > 0);
 
-      // Parse instructions
-      let instructions: string[] = [];
-      if (recipeData.recipeInstructions) {
-        if (Array.isArray(recipeData.recipeInstructions)) {
-          instructions = recipeData.recipeInstructions.map((step: any) => {
-            if (typeof step === "string") return cleanImportedText(decodeHtmlEntities(step.replace(/<[^>]*>/g, "").trim()));
-            if (step.text) return cleanImportedText(decodeHtmlEntities(step.text.replace(/<[^>]*>/g, "").trim()));
-            if (step.itemListElement) {
-              return step.itemListElement.map((sub: any) => cleanImportedText(decodeHtmlEntities((sub.text || String(sub)).replace(/<[^>]*>/g, "").trim()))).join(" ");
-            }
-            return cleanImportedText(decodeHtmlEntities(String(step).replace(/<[^>]*>/g, "").trim()));
-          }).filter((s: string) => s.length > 0);
-        } else if (typeof recipeData.recipeInstructions === "string") {
-          instructions = recipeData.recipeInstructions.replace(/<[^>]*>/g, "").split(/\n+/).filter((s: string) => s.trim()).map((s: string) => cleanImportedText(decodeHtmlEntities(s.trim())));
-        }
+      let instructions = extractInstructionsFromJsonLd(recipeData.recipeInstructions);
+      if (isPlaceholderInstructions(instructions)) {
+        const fallback = extractRecipeFallback(html);
+        const fb = Array.isArray(fallback?.recipeInstructions) ? fallback.recipeInstructions as string[] : [];
+        instructions = (fb.length > 1 && !isPlaceholderInstructions(fb)) ? fb : [];
       }
 
-      // Validate we got enough data
       if (ingredients.length === 0) {
-        return res.status(400).json({
-          error: "Found recipe but no ingredients could be extracted. The site's format may not be supported. Try copying the recipe details manually."
-        });
+        return res.status(400).json({ error: "Found recipe but no ingredients could be extracted. Try copying the recipe details manually." });
       }
 
-      // Guess cuisine
       const cuisine = guessCuisine(name, rawIngredients);
-
-      // Guess tags
       const tags = detectTags(name, prepTime + cookTime);
 
-      // Extract image URL from JSON-LD
       let imageUrl: string | null = null;
       if (recipeData.image) {
-        if (typeof recipeData.image === "string") {
-          imageUrl = recipeData.image;
-        } else if (Array.isArray(recipeData.image)) {
-          imageUrl = typeof recipeData.image[0] === "string" ? recipeData.image[0] : recipeData.image[0]?.url || null;
-        } else if (recipeData.image.url) {
-          imageUrl = recipeData.image.url;
-        }
+        if (typeof recipeData.image === "string") imageUrl = recipeData.image;
+        else if (Array.isArray(recipeData.image)) imageUrl = typeof recipeData.image[0] === "string" ? recipeData.image[0] : recipeData.image[0]?.url || null;
+        else if (recipeData.image.url) imageUrl = recipeData.image.url;
       }
 
       res.json({
@@ -799,11 +869,10 @@ export async function registerRoutes(server: Server, app: Express) {
     const staples = await storage.getPantryStaples(householdId);
     const stapleNames = new Set(staples.map(s => s.name.toLowerCase()));
 
-    // Collect all ingredients from selected recipes
+    // Collect all ingredients from selected recipes (single batch query)
+    const recipeRows = await storage.getRecipesByIds(recipeIds, householdId);
     const allIngredients: Array<{ name: string; amount: number; unit: string }> = [];
-    for (const id of recipeIds) {
-      const recipe = await storage.getRecipe(id, householdId);
-      if (!recipe) continue;
+    for (const recipe of recipeRows) {
       try {
         const parsed: Array<{ name: string; amount: number; unit: string }> =
           recipe.ingredients ? JSON.parse(recipe.ingredients) : [];

@@ -59,7 +59,7 @@ const VIBES = [
   { label: "Something new",  emoji: "🌍",  value: "adventurous" },
   { label: "Crockpot",       emoji: "🫕",  value: "crockpot" },
   { label: "Air Fryer",      emoji: "🌬️", value: "air fryer" },
-  { label: "Meal Prep",      emoji: "📦",  value: "meal prep" },
+  { label: "Batch Cook",     emoji: "📦",  value: "meal prep" },
 ];
 
 const PROTEINS = [
@@ -445,9 +445,9 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
         data-testid="panel-copilot"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0 bg-gradient-to-r from-violet-600/10 to-indigo-600/10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0 bg-gradient-to-r from-orange-600/10 to-amber-600/10">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 shadow-sm">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#C96A3A] shadow-sm">
               <Sparkles className="h-4 w-4 text-white" />
             </div>
             <div>
@@ -527,7 +527,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
                           className="flex-col items-center justify-center text-center py-3 gap-1 relative"
                         >
                           {isYourStyle && (
-                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-violet-500" title="Matches your taste" />
+                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-orange-500" title="Matches your taste" />
                           )}
                           <span className="text-2xl leading-none">{c.emoji}</span>
                           <span className="text-xs leading-tight">{c.label}</span>
@@ -537,7 +537,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
                   </div>
                   {dominantCuisines.size > 0 && (
                     <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
                       Matches your saved recipe history
                     </p>
                   )}
@@ -621,7 +621,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
           {/* Search CTA */}
           {readyToSearch && !hasResults && !searchMutation.isPending && (
             <Button
-              className="w-full h-12 text-sm gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold shadow-lg shadow-violet-500/25"
+              className="w-full h-12 text-sm gap-2 bg-[#C96A3A] hover:bg-[#A85530] text-white font-semibold shadow-lg"
               onClick={handleSearch}
             >
               <Sparkles className="h-4 w-4" />
@@ -632,7 +632,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
           {/* Loading state */}
           {searchMutation.isPending && (
             <div className="flex flex-col items-center gap-3 py-8 text-sm text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+              <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
               <p>Searching real recipes...</p>
             </div>
           )}
@@ -661,7 +661,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
                       onClick={() => setCurrentIdx(i)}
                       className={cn(
                         "h-1.5 rounded-full transition-all",
-                        i === currentIdx ? "w-5 bg-violet-500" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
+                        i === currentIdx ? "w-5 bg-orange-500" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
                       )}
                     />
                   ))}

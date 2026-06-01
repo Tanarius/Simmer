@@ -1,4 +1,14 @@
 import "dotenv/config";
+import * as Sentry from "@sentry/node";
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? "development",
+    tracesSampleRate: 0.1,
+  });
+}
+
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -114,6 +124,11 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+
+  // Sentry error handler must come before the generic error handler
+  if (process.env.SENTRY_DSN) {
+    Sentry.setupExpressErrorHandler(app);
+  }
 
   // Global error handler — never leak stack traces to clients
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

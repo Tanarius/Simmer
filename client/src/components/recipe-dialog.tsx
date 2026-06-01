@@ -34,7 +34,7 @@ const cuisineColors: Record<string, string> = {
   "italian": "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
   "asian": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
   "american": "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  "other": "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  "other": "bg-stone-100 text-stone-700 dark:bg-stone-900/30 dark:text-stone-300",
 };
 
 function parseTags(tagsJson: string | null | undefined): string[] {
@@ -174,24 +174,6 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
     },
   });
 
-  const cleanMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/ai/clean-recipe/${recipe!.id}`);
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to clean recipe");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/recipes"] });
-      toast({ title: "Recipe Cleaned! ✨", description: "Standardized instructions and ingredients using Kitchen Copilot." });
-    },
-    onError: (err: any) => {
-      toast({ title: "Failed to clean recipe", description: err.message, variant: "destructive" });
-    }
-  });
-
   if (!recipe) return null;
 
   // Cook Mode overlay — renders full-screen, outside the dialog
@@ -232,16 +214,6 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
                 <Flame className="h-3.5 w-3.5" />
                 Cook
               </Button>
-              <Button
-                size="icon"
-                variant="secondary"
-                className={cn("h-8 w-8 bg-background/80 backdrop-blur-sm text-purple-500 hover:bg-background", cleanMutation.isPending && "opacity-50")}
-                onClick={() => cleanMutation.mutate()}
-                disabled={cleanMutation.isPending}
-                title="Clean & Structure with Kitchen Copilot"
-              >
-                {cleanMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-              </Button>
               {editMode ? (
                 <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm text-green-600" onClick={saveEdit} disabled={updateMutation.isPending}>
                   {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
@@ -280,9 +252,6 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
                   <Button size="sm" className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white gap-1.5 font-semibold" onClick={() => setCookMode(true)}>
                     <Flame className="h-3.5 w-3.5" />
                     Cook
-                  </Button>
-                  <Button size="icon" variant="outline" className={cn("text-purple-500 border-purple-200 hover:bg-purple-50 dark:border-purple-800/50 dark:hover:bg-purple-900/30", cleanMutation.isPending && "opacity-50")} onClick={() => cleanMutation.mutate()} disabled={cleanMutation.isPending} title="Clean & Structure with Kitchen Copilot">
-                    {cleanMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                   </Button>
                   {editMode ? (
                     <Button size="icon" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={saveEdit} disabled={updateMutation.isPending}>
@@ -389,7 +358,7 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
                             {ing.name}
                           </span>
                           {isDisliked && substitute && (
-                            <span className="text-violet-500 text-xs shrink-0">→ {substitute}</span>
+                            <span className="text-orange-500 text-xs shrink-0">→ {substitute}</span>
                           )}
                           {isDisliked && !substitute && (
                             <span title="Flagged in your dietary preferences">
@@ -714,7 +683,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-add-recipe">
         <DialogHeader>
           <DialogTitle>Add New Recipe</DialogTitle>
-          <DialogDescription>Add a recipe to your meal prep library.</DialogDescription>
+          <DialogDescription>Add a recipe to your Simmer library.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5 mt-2">

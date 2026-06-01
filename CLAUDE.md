@@ -1,4 +1,4 @@
-# MealPrep — Claude Code Project Guide
+# Simmer — Claude Code Project Guide
 
 This file is loaded automatically at the start of every session. Keep it current to avoid wasting tokens re-exploring the codebase.
 
@@ -6,11 +6,11 @@ This file is loaded automatically at the start of every session. Keep it current
 
 ## Stack
 
-- **Frontend**: React + Vite, TailwindCSS, shadcn/ui, TanStack Query, Wouter routing
+- **Frontend**: React + Vite, TailwindCSS, shadcn/ui, TanStack Query, Wouter routing (hash-based: `/#/`, `/#/recipes`, etc.)
 - **Backend**: Express + TypeScript (tsx), Passport.js (local strategy), express-session (MemoryStore)
 - **Database**: PostgreSQL via Neon — Drizzle ORM, schema in `shared/schema.ts`
 - **AI**: Anthropic Claude (`server/services/anthropic.ts`), Kitchen Copilot (`server/services/copilot.ts`)
-- **Recipe APIs**: Spoonacular (`server/services/spoonacular.ts`) + Edamam (`server/services/edamam.ts`) + TheMealDB (free fallback)
+- **Recipe APIs**: Spoonacular (`server/services/spoonacular.ts`) + Edamam (`server/services/edamam.ts`) + TheMealDB (always-on parallel source)
 - **Deployment**: Railway (previously Render)
 
 ---
@@ -21,7 +21,7 @@ This file is loaded automatically at the start of every session. Keep it current
 ANTHROPIC_API_KEY       # Claude AI — required
 DATABASE_URL            # Neon PostgreSQL — required
 SESSION_SECRET          # Express session — required
-SPOONACULAR_API_KEY     # Recipe search — 365k recipes (free tier)
+SPOONACULAR_API_KEY     # Recipe search + URL import — 365k recipes (free tier, ~50pts/extract)
 EDAMAM_APP_ID           # Recipe search — 2.3M recipes (PAID, ~$29/mo — Recipe Search API is not free)
 EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Edamam plan
 ```
@@ -41,6 +41,13 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 - `server/routes.ts` — all non-AI routes: recipes CRUD, shopping list, weekly plans, pantry, URL import
 - `server/routes/ai.ts` — AI routes under `/api/ai/`: copilot chat, find-recipes, save-recipe, clean-recipe, suggest, weekly-plan
 - `server/routes/onboarding.ts` — onboarding flow
+- `server/routes/snacks.ts` — snack wishlist + persistent shopping list (product search, bulk add, toggle, clear)
+
+### Pages & Routing
+- `/` → `HomePage` (dashboard: today's meals, activity feed, shopping nudge)
+- `/recipes` → `RecipesPage` (full recipe library with dialog, copilot panel)
+- `/planner` → `PlannerPage` (weekly drag-and-drop meal planner)
+- `/shopping`, `/pantry`, `/profile`, `/auth`, `/onboarding`
 
 ### Data Model (key tables)
 - `recipes` — ingredients stored as JSON text: `[{name, amount, unit, category}]`; instructions as JSON text: `["step 1", "step 2"]`
@@ -49,12 +56,13 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 - `userTasteProfile` — `dislikedIngredients[]`, `ingredientSubstitutions{}`, `likedCuisines[]`, `complexityPreference`
 - `copilotSessions` — chat history per sessionId per user
 - `activityLog` — `(userId, action, recipeId, recipeName, createdAt)` — actions: recipe_added, recipe_deleted, plan_updated, plan_meal_added, pantry_added
+- `users` — has `avatar TEXT` column (Dicebear style key, nullable). Set via `PATCH /api/auth/avatar`, read by `getHouseholdMembers`.
 
 ### Recipe Categorization (`server/utils/categorization.ts: guessCategory()`)
 - Always re-run `guessCategory(name)` at shopping list generation time — never trust stored `ing.category`
 - Pantry/spices checked BEFORE produce to prevent "garlic powder" → produce
 - Order: protein → frozen → bakery → grains → dairy → condiments → pantry → produce
-- Extracted from routes.ts to utility module; 98 unit tests in `server/__tests__/guess-category.test.ts`
+- `guessCuisine(title, ingredients[])` is the single shared cuisine function — **do not duplicate inline** (was fixed in session)
 
 ### Social Media Import (`POST /api/ai/import-from-social`)
 - Two modes: `text` (paste caption) → haiku; `image` (screenshot upload) → sonnet-4-6 vision
@@ -62,12 +70,41 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 - 4 MB image size guard; strips data URL prefix automatically
 - Rate-limited via `aiRateLimit` middleware
 
+### URL Recipe Import (`POST /api/recipes/import-url`)
+Two-strategy pipeline in `server/routes.ts`:
+1. **Strategy 1 — Direct fetch + JSON-LD/HTML parse**: Works for most recipe blogs (Serious Eats, Simply Recipes, NYT Cooking, etc.) that serve server-rendered HTML. `fetchHtml()` sends clean browser headers (no `Accept-Encoding: br`, no `Sec-Fetch-*` headers — those caused issues).
+2. **Strategy 2 — Spoonacular extract API** (`extractRecipeByUrl()` in `server/services/spoonacular.ts`): Handles Cloudflare-protected sites (AllRecipes, Food Network, Tasty, Delish, Bon Appétit). ~50 Spoonacular points per call. Returns full `SpoonacularRecipe` shape.
+- **Wayback Machine was removed** — archive.org now returns 402 "Payment Required" from Node.js fetch and the availability API takes 10+ seconds. Do not re-add it.
+- **Foodista is permanently broken** for URL import — fully client-side rendered (Next.js App Router), no server-rendered data. Users should delete Foodista recipes and use text-paste import instead.
+- Auto-clean fires after save: if instructions are placeholder/empty, Claude re-fetches + generates steps from ingredients.
+
 ### Copilot Recipe Search (`server/services/spoonacular.ts: searchRecipesForCopilot()`)
-- First search: Spoonacular complexSearch + Edamam in parallel via `Promise.allSettled`, results interleaved
-- "Find different" (`attempt > 0`): random Spoonacular + Edamam parallel, interleaved
+- First search: Spoonacular + **TheMealDB** + Edamam in parallel via `Promise.allSettled`, interleaved in priority order: spoon > mealdb > edamam
+- "Find different" (`attempt > 0`): random Spoonacular + **TheMealDB** + Edamam parallel, same priority interleave
+- TheMealDB is always-on (free, no key needed, full instructions) — no longer just a last-resort fallback
 - 5-level fallback cascade if Spoonacular returns < 3: relax time → drop type → drop protein → drop cuisine → Edamam only → TheMealDB
+- Edamam results have **no step-by-step instructions** (API limitation) — a single "see source link" step is injected so saved recipes aren't completely blank
 - `protein=sides` is treated as a mealType override, not an ingredient filter
 - `type=snack` avoided in Spoonacular (nearly empty); uses `query=snack + maxReadyTime=20` instead
+
+### Shopping List (`client/src/pages/shopping.tsx`)
+- **Auto-sync**: Full reconciliation on every plan change — deletes all `source="recipe"` items, re-adds from current plan. Triggered by plan hash change (localStorage key: `shopping-synced-{weekStart}-{planHash}`). Does NOT poll — mutation-based invalidation only.
+- **Manual sync button**: Same reconciliation logic, also resets the sync key so it re-runs.
+- **Layout**: CSS `columns-2` with `break-inside-avoid` — true newspaper-column masonry, not CSS grid.
+- `DELETE /api/snacks/shopping?source=recipe` — clears only recipe-sourced items (not manual adds).
+
+### Avatar System (`client/src/components/DicebearAvatar.tsx`)
+- 8 Dicebear styles: `adventurer`, `lorelei`, `bottts`, `micah`, `funEmoji`, `pixelArt`, `rings`, `thumbs`
+- Falls back to gradient initials if `avatarStyle` is null/undefined
+- Used in: profile page (camera picker), app sidebar (user row), activity feed (per-entry avatar)
+- `getRecentActivity()` now returns `avatar: string | null` alongside `username` — activity feed uses it
+
+### Weekly Planner (`client/src/pages/planner.tsx`)
+- Drag library: `@dnd-kit/core` + `@dnd-kit/utilities`
+- **Slot-to-slot drag**: Filled meal cards are now draggable (not just sidebar recipes). `useDraggable` + `useDroppable` combined on the same div using inline ref callback `ref={node => { setDropRef(node); setDragRef(node); }}`. Data carries `{ fromSlot: slotKey }` to distinguish from sidebar drags.
+- **Move vs swap**: If dragging to empty slot → moves and clears source. If dragging to filled slot → swaps both recipes.
+- `handleDragStart` looks up recipe from `currentMeals[fromSlot]` for the ghost overlay.
+- Sensors: `PointerSensor { distance: 5 }`, `TouchSensor { delay: 200, tolerance: 5 }` — quick tap still fires onClick for mobile picker.
 
 ---
 
@@ -77,15 +114,27 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 - All queries use path-based keys: `["/api/recipes"]`, `["/api/plans", weekStart]`
 - After mutations, invalidate with `queryClient.invalidateQueries({ queryKey: ["/api/recipes"] })`
 - Recipe dialog uses `selectedRecipeId` (not full object) so live query data auto-updates after clean
+- Activity feed polls every 60s (was 30s, reduced for efficiency)
+- Home page activity/shopping polls every 120s (was 30s)
+- Shopping list does NOT auto-poll — updates via mutation invalidation only (was 20s)
 
-### Routing (Wouter)
-- Routes defined in `client/src/App.tsx`
-- Auth guard: unauthenticated → redirected to `/auth`
-- Pages: `/` (recipes), `/planner`, `/shopping`, `/pantry`, `/profile`, `/auth`, `/onboarding`
+### Opening a Recipe Dialog from Any Page
+```tsx
+// From any page (home, planner, activity feed):
+sessionStorage.setItem("openRecipeId", String(id));
+setLocation("/recipes");
+// The recipes page reads sessionStorage on mount and opens the dialog.
+
+// If ALREADY on /recipes:
+window.dispatchEvent(new CustomEvent("openRecipe", { detail: { recipeId: id } }));
+```
+- `RecipeHoverPreview` in `ActivityFeed.tsx` checks `window.location.hash.startsWith("#/recipes")` — if yes, fires event; otherwise sessionStorage + navigate to `/recipes` (not `/`).
+- Home page Cook button uses the same pattern (`setLocation("/recipes")`).
 
 ### Shared Utilities
-- `client/src/lib/ingredientCategories.ts` — `categorizeIngredient()`, `getIngredientChipClass()`, `groupIngredientsByCategory()` — used by both CopilotPanel chips and recipe-dialog grouped ingredient list
+- `client/src/lib/ingredientCategories.ts` — `categorizeIngredient()`, `getIngredientChipClass()`, `groupIngredientsByCategory()`
 - `client/src/lib/format-time.ts` — `formatTimeBreakdown(prep, cook)`
+- `client/src/components/DicebearAvatar.tsx` — shared avatar component, accepts `username`, `avatarStyle`, `size`, `className`
 
 ### Copilot Panel (`client/src/components/CopilotPanel.tsx`)
 - Right drawer on desktop, bottom sheet on mobile
@@ -95,13 +144,13 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 
 ---
 
-## Cuisine & Tag System (as of 2026-04-10)
+## Cuisine & Tag System (as of 2026-04-25)
 
 ### Cuisines (7 values)
 `tex-mex`, `italian`, `asian`, `american`, `mediterranean`, `indian`, `other`
 - UI colors: orange, red, emerald, blue, cyan, yellow, purple
-- `guessCuisine(title, ingredients[])` in `server/routes.ts` — keyword-based, used for URL imports
-- `normalizeCuisine(raw, title)` inline in `server/routes/ai.ts` save-recipe — handles Spoonacular cuisine strings + title fallback
+- `guessCuisine(title, ingredients[])` in `server/utils/categorization.ts` — the SINGLE shared function
+- Copilot save-recipe (`server/routes/ai.ts`) imports and uses `guessCuisine` — the old inline `normalizeCuisine` was removed
 
 ### Tags (auto-detected on save)
 `crockpot`, `slow-cook`, `grilled`, `quick`, `make-ahead`, `freezer-friendly`, `one-pot`, `one-pan`, `air-fryer`
@@ -112,10 +161,18 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 
 ---
 
-## Known Issues / Tech Debt (as of 2026-04-16)
+## Performance & Resource Management (as of 2026-04-25)
+
+- **Cache TTL eviction**: `server/utils/cache.ts` runs `evictExpired()` every 10 min via `setInterval(...).unref()` — no longer grows unbounded
+- **Shopping list query**: `POST /api/shopping-list` uses `storage.getRecipesByIds(ids, householdId)` — single batch `inArray` query, was N+1 loop
+- **Rate limiting**: `POST /api/ai/copilot/save-recipe` now has `copilotRateLimit` — was completely unguarded
+- **Polling intervals**: activity feed 60s, home page 120s, shopping list off (mutation-only)
+
+---
+
+## Known Issues / Tech Debt (as of 2026-04-25)
 
 ### Security (open, non-blocking)
-- SEC-009: Some household routes use inline `req.isAuthenticated()` rather than `requireAuth` middleware — functionally identical, stylistically inconsistent
 - SEC-010: No CSRF tokens — deferred post-launch. SameSite=Lax on session cookie partially mitigates.
 
 ### Data Quality
@@ -124,8 +181,7 @@ EDAMAM_APP_KEY          # Recipe search — only activate if you have a paid Eda
 - Onboarding dish thumbnails broken (bad seed image URLs)
 
 ### Performance
-- In-memory AI response cache (`server/utils/cache.ts`) — grows unbounded, no eviction
-- Spoonacular `fillIngredients: true` costs extra quota points — consider dropping for count-only queries
+- Spoonacular `fillIngredients: true` costs extra quota points — already set to `false`, confirmed in audit
 
 ---
 
@@ -138,7 +194,7 @@ npm test           # run test suite (vitest, no DB/API keys needed)
 npm run test:watch # watch mode during development
 ```
 
-Server changes require a manual restart (tsx doesn't watch by default in this setup). Kill with `npx kill-port 5000`.
+Server changes require a manual restart (tsx doesn't watch by default in this setup). Kill with `npx kill-port 5000 && npm run dev`.
 
 ---
 
@@ -151,7 +207,7 @@ Full living documents — read these before touching auth, routes, or storage:
 
 ### Security rules (non-negotiable)
 - `householdId` always comes from `req.user.householdId` — never from request body or params.
-- Every route that touches user data must use `requireAuth` middleware, not inline `if (!req.user)` checks.
+- Every route that touches user data must use `requireAuth` middleware, not inline `if (!req.user)` checks. (SEC-009 fixed: all 5 household routes migrated in session 2026-04-24)
 - Plaintext password comparison lives ONLY in the login migration path (`server/auth.ts:78`). Do not add it anywhere else.
 - After any security fix, add a test that would have caught the original bug and update `docs/SECURITY_AUDIT.md`.
 
@@ -170,6 +226,10 @@ Full living documents — read these before touching auth, routes, or storage:
 - Don't add `type=snack` to Spoonacular params — nearly empty, use query text instead
 - Don't call `useMemo` after an early return in React components — hooks violation
 - Don't use `element.click()` to trigger React state — use React synthetic events or `nativeInputValueSetter`
+- Don't add inline `normalizeCuisine` functions — use shared `guessCuisine` from `server/utils/categorization.ts`
+- Don't use Wayback Machine (archive.org) for URL import fallback — returns 402 from Node.js, availability API takes 10+ seconds. Use Spoonacular extract instead.
+- Don't navigate to `/` to open a recipe — `/` is the home page (dashboard), `/recipes` is the recipe library. Always use `setLocation("/recipes")` + sessionStorage.
+- Don't send `Sec-Fetch-*` or `Accept-Encoding: gzip, deflate, br` headers in server-side `fetch()` calls — can cause decompression issues and trigger bot detection on third-party APIs.
 
 ---
 

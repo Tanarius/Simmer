@@ -1,3 +1,13 @@
+import * as Sentry from "@sentry/react";
+
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    environment: import.meta.env.MODE,
+    tracesSampleRate: 0.1,
+  });
+}
+
 import React from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
@@ -96,6 +106,16 @@ function NoEmailBanner() {
   );
 }
 
+// Resets ErrorBoundary on every route change by using location as the key
+function BoundedRouter() {
+  const [location] = useLocation();
+  return (
+    <ErrorBoundary key={location}>
+      <AppRouter />
+    </ErrorBoundary>
+  );
+}
+
 function AppLayout() {
   useTheme();
 
@@ -119,9 +139,7 @@ function AppLayout() {
               <UpgradeBanner />
             </header>
             <main className="flex-1 overflow-auto">
-              <ErrorBoundary>
-                <AppRouter />
-              </ErrorBoundary>
+              <BoundedRouter />
             </main>
           </div>
         </div>

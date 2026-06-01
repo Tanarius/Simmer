@@ -16,6 +16,14 @@ const searchRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+const bulkRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  message: { error: "Too many bulk-add requests. Slow down." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // ── Product Search (Open Food Facts) ─────────────────────────────────────────
 
 router.get("/products/search", requireAuth, searchRateLimit, async (req, res, next) => {
@@ -102,12 +110,13 @@ router.post("/shopping", requireAuth, async (req, res, next) => {
 });
 
 // Bulk-add items (from recipe generation)
-router.post("/shopping/bulk", requireAuth, async (req, res, next) => {
+router.post("/shopping/bulk", requireAuth, bulkRateLimit, async (req, res, next) => {
   try {
     const householdId = (req.user as any).householdId;
     const userId = (req.user as any).id;
     const { items } = req.body as { items: { name: string; amount?: string; unit?: string; category?: string; source?: string; sourceId?: number }[] };
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "items array required" });
+    if (items.length > 50) return res.status(400).json({ error: "Cannot add more than 50 items at once" });
     const enriched = dedupeShoppingItems(
       items.map(i => ({ ...i, category: i.category ?? guessCategory(i.name) }))
     );
@@ -138,9 +147,11 @@ router.delete("/shopping/:id", requireAuth, async (req, res, next) => {
 router.delete("/shopping", requireAuth, async (req, res, next) => {
   try {
     const householdId = (req.user as any).householdId;
-    const { checked } = req.query;
+    const { checked, source } = req.query;
     if (checked === "true") {
       await storage.clearCheckedShoppingItems(householdId);
+    } else if (source === "recipe") {
+      await storage.clearRecipeShoppingItems(householdId);
     } else {
       await storage.clearAllShoppingItems(householdId);
     }

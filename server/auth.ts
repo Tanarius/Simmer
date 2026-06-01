@@ -219,7 +219,10 @@ export function setupAuth(app: Express) {
     } catch (err) { next(err); }
   });
 
-  app.post("/api/auth/reset-password", async (req, res, next) => {
+  const resetRateLimit = rateLimit({ windowMs: 15 * 60_000, max: 10,
+    message: { error: "Too many requests. Try again later." } });
+
+  app.post("/api/auth/reset-password", resetRateLimit, async (req, res, next) => {
     try {
       const { token, newPassword } = req.body;
       if (!token || !newPassword || newPassword.length < 8)
@@ -231,6 +234,23 @@ export function setupAuth(app: Express) {
       const hashed = await bcrypt.hash(newPassword, 12);
       await storage.updateUserPassword(user.id, hashed);
       await storage.clearResetToken(user.id);
+      res.json({ success: true });
+    } catch (err) { next(err); }
+  });
+
+  // Update avatar (authenticated)
+  app.patch("/api/auth/avatar", async (req, res, next) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const { avatar } = req.body;
+      const VALID_AVATAR_STYLES = new Set([
+        "adventurer", "adventurerNeutral", "avataaars", "bigEars", "bigEarsNeutral",
+        "bigSmile", "bottts", "croodles", "funEmoji", "icons", "identicon", "initials",
+        "lorelei", "micah", "miniavs", "openPeeps", "personas", "pixelArt", "shapes", "thumbs"
+      ]);
+      if (!avatar || typeof avatar !== "string" || !VALID_AVATAR_STYLES.has(avatar))
+        return res.status(400).json({ error: "Invalid avatar" });
+      await storage.setUserAvatar((req.user as any).id, avatar);
       res.json({ success: true });
     } catch (err) { next(err); }
   });

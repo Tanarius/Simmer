@@ -25,7 +25,7 @@ const FEATURES = [
     desc: "Screenshot a recipe from Instagram or TikTok — the AI extracts it into your library instantly.",
   },
   {
-    icon: <Users className="h-5 w-5 text-purple-400" />,
+    icon: <Users className="h-5 w-5 text-orange-400" />,
     title: "Household Collaboration",
     desc: "Invite your partner, roommates, or family. Everyone plans together, nothing gets forgotten.",
   },
@@ -63,7 +63,7 @@ export default function LandingPage() {
       <nav className="flex items-center justify-between px-6 py-4 border-b border-border max-w-6xl mx-auto">
         <div className="flex items-center gap-2 font-bold text-lg">
           <span className="text-2xl">🍽️</span>
-          MealPrep
+          Simmer
         </div>
         <div className="flex items-center gap-3">
           <Link href="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -90,7 +90,7 @@ export default function LandingPage() {
           <span className="text-primary">in minutes, not hours</span>
         </h1>
         <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-8">
-          MealPrep combines an AI recipe assistant, drag-and-drop meal planner, and smart shopping lists — all shared with your household.
+          Simmer combines an AI recipe assistant, drag-and-drop meal planner, and smart shopping lists — all shared with your household.
         </p>
         <div className="flex items-center justify-center gap-4 flex-wrap">
           <Link
@@ -182,7 +182,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-border mt-8">
         <div className="max-w-5xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-          <span>© {new Date().getFullYear()} MealPrep. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Simmer. All rights reserved.</span>
           <div className="flex items-center gap-5">
             <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
             <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>

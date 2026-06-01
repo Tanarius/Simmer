@@ -30,6 +30,61 @@ export interface RecipeImageResult {
   spoonacularId: number | null;
 }
 
+// ─── URL recipe extraction (handles Cloudflare-protected sites like AllRecipes) ─
+
+/**
+ * Use Spoonacular's /recipes/extract endpoint to scrape a recipe from any URL.
+ * Costs ~50 Spoonacular points. Returns null if no API key or request fails.
+ */
+export async function extractRecipeByUrl(url: string): Promise<SpoonacularRecipe | null> {
+  const apiKey = process.env.SPOONACULAR_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await axios.get('https://api.spoonacular.com/recipes/extract', {
+      params: { url, analyze: false, addRecipeInformation: true, apiKey },
+      timeout: 15000,
+    });
+    const d = res.data;
+    if (!d?.title) return null;
+
+    // Strip HTML from summary
+    const summary = (d.summary ?? '').replace(/<[^>]*>/g, '').replace(/&[a-z]+;/g, ' ').trim();
+
+    // Map extendedIngredients → our ingredient shape
+    const ingredients = (d.extendedIngredients ?? []).map((i: any) => ({
+      name: i.nameClean ?? i.name ?? i.originalName ?? '',
+      amount: i.amount ?? 0,
+      unit: i.unit ?? '',
+      original: i.original ?? '',
+    })).filter((i: any) => i.name);
+
+    // Flatten analyzedInstructions → ordered step strings
+    const instructions: string[] = [];
+    for (const block of d.analyzedInstructions ?? []) {
+      for (const step of block.steps ?? []) {
+        if (step.step) instructions.push(step.step);
+      }
+    }
+
+    return {
+      id: d.id ?? 0,
+      title: d.title,
+      imageUrl: d.image ?? '',
+      sourceUrl: d.sourceUrl ?? url,
+      readyInMinutes: d.readyInMinutes ?? 0,
+      servings: d.servings ?? 4,
+      summary,
+      cuisines: d.cuisines ?? [],
+      dishTypes: d.dishTypes ?? [],
+      diets: d.diets ?? [],
+      ingredients,
+      instructions,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Nutrition enrichment (existing) ─────────────────────────────────────────
 
 export async function enrichWithNutrition(recipeName: string, ingredients: string[]): Promise<NutritionData | null> {
@@ -112,6 +167,26 @@ export interface CopilotSearchParams {
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
 }
+
+const CUISINE_NORMALIZE: Record<string, { include: string; exclude?: string }> = {
+  american:       { include: "american", exclude: "canadian" },
+  "tex-mex":      { include: "mexican" },
+  italian:        { include: "italian" },
+  asian:          { include: "asian" },
+  mediterranean:  { include: "mediterranean" },
+  indian:         { include: "indian" },
+  mexican:        { include: "mexican" },
+  chinese:        { include: "chinese" },
+  japanese:       { include: "japanese" },
+  thai:           { include: "thai" },
+  greek:          { include: "greek" },
+  french:         { include: "french" },
+  korean:         { include: "korean" },
+  vietnamese:     { include: "vietnamese" },
+  southern:       { include: "american", exclude: "canadian" },
+  bbq:            { include: "american", exclude: "canadian" },
+  "comfort food": { include: "american", exclude: "canadian" },
+};
 
 function mapCuisine(choice: string | undefined): string | undefined {
   const map: Record<string, string> = {
@@ -245,22 +320,24 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
     return filtered.length >= 2 ? filtered : results;
   }
 
-  // ── "Find different" path: mix Edamam + random Spoonacular for genuine variety ──
+  // ── "Find different" path: random Spoonacular + TheMealDB + Edamam for genuine variety ──
   if (attempt > 0) {
     try {
-      // Request full count from each source so one can cover if the other returns fewer
-      const [edamamResults, randomResults] = await Promise.allSettled([
-        searchRecipesEdamam({ ...params, count }),
+      const [randomResults, mealDbResults, edamamResults] = await Promise.allSettled([
         randomSearch(buildRandomTags(params), count, apiKey),
+        searchTheMealDB({ ...params, count: Math.ceil(count / 2) }),
+        searchRecipesEdamam({ ...params, count }),
       ]);
-      const edamam = edamamResults.status === 'fulfilled' ? edamamResults.value : [];
-      const random = randomResults.status === 'fulfilled' ? randomResults.value : [];
-      // Interleave: edamam[0], random[0], edamam[1], random[1], ...
+      const random  = randomResults.status  === 'fulfilled' ? randomResults.value  : [];
+      const mealDb  = mealDbResults.status  === 'fulfilled' ? mealDbResults.value  : [];
+      const edamam  = edamamResults.status  === 'fulfilled' ? edamamResults.value  : [];
+      // Interleave: random > mealdb > edamam (priority: instructions quality)
       const combined: SpoonacularRecipe[] = [];
-      const maxLen = Math.max(edamam.length, random.length);
+      const maxLen = Math.max(random.length, mealDb.length, edamam.length);
       for (let i = 0; i < maxLen; i++) {
-        if (i < edamam.length) combined.push(edamam[i]);
-        if (i < random.length) combined.push(random[i]);
+        if (i < random.length)  combined.push(random[i]);
+        if (i < mealDb.length)  combined.push(mealDb[i]);
+        if (i < edamam.length)  combined.push(edamam[i]);
       }
       if (combined.length >= 3) return filterByProtein(combined.slice(0, count));
     } catch { /* fall through to complexSearch */ }
@@ -280,16 +357,20 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
 
   if (vibeParams.maxReadyTime) base.maxReadyTime = vibeParams.maxReadyTime;
   if (vibeParams.minHealthScore) base.minHealthScore = vibeParams.minHealthScore;
-  if (cuisine) base.cuisine = cuisine;
+  if (cuisine) {
+    const normalized = CUISINE_NORMALIZE[cuisineChoice?.toLowerCase() ?? ''] ?? { include: cuisine };
+    base.cuisine = normalized.include;
+    if (normalized.exclude) base.excludeCuisine = normalized.exclude;
+  }
   if (avoidedIngredients.length) base.excludeIngredients = avoidedIngredients.slice(0, 5).join(',');
   if (!cuisine && cuisineChoice === 'surprise') base.sort = 'random';
 
   // Track cooking-method keywords separately so we can drop them independently
   // from the cuisine filter during the cascade.
   let vibeQuery: string | null = null;
-  if (vibe === 'crockpot')  vibeQuery = 'slow cooker crock pot';
-  if (vibe === 'air fryer') vibeQuery = 'air fryer';
-  if (vibe === 'meal prep') vibeQuery = 'meal prep batch cooking';
+  if (vibe === 'crockpot')  vibeQuery = 'slow cooker crock pot braised stew';
+  if (vibe === 'air fryer') vibeQuery = 'air fryer crispy roasted';
+  if (vibe === 'meal prep') vibeQuery = 'meal prep batch cooking make ahead';
   if (vibeQuery) base.query = vibeQuery;
 
   // Sides override: treat protein=sides as a meal type
@@ -305,27 +386,33 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
   }
 
   try {
-    // Attempt 1: full params — also fetch Edamam in parallel for variety
-    const [spoonResults, edamamResults] = await Promise.allSettled([
+    // Attempt 1: full params — also fetch TheMealDB + Edamam in parallel for variety
+    const [spoonResults, mealDbResults, edamamResults] = await Promise.allSettled([
       complexSearch(base),
+      searchTheMealDB({ ...params, count: Math.ceil(count / 2) }),
       searchRecipesEdamam({ ...params, count: Math.ceil(count / 2) }),
     ]);
-    let results = spoonResults.status === 'fulfilled' ? spoonResults.value : [];
+    let results   = spoonResults.status  === 'fulfilled' ? spoonResults.value  : [];
+    const mealDb1 = mealDbResults.status === 'fulfilled' ? mealDbResults.value : [];
     const edamam1 = edamamResults.status === 'fulfilled' ? edamamResults.value : [];
 
     if (results.length >= 3) {
-      // Enrich with Edamam — interleave for variety, cap at count
-      if (edamam1.length > 0) {
+      // Interleave: spoon > mealdb (full instructions) > edamam (no instructions)
+      if (mealDb1.length > 0 || edamam1.length > 0) {
         const combined: SpoonacularRecipe[] = [];
-        const maxLen = Math.max(results.length, edamam1.length);
+        const maxLen = Math.max(results.length, mealDb1.length, edamam1.length);
         for (let i = 0; i < maxLen; i++) {
-          if (i < results.length) combined.push(results[i]);
-          if (i < edamam1.length) combined.push(edamam1[i]);
+          if (i < results.length)  combined.push(results[i]);
+          if (i < mealDb1.length)  combined.push(mealDb1[i]);
+          if (i < edamam1.length)  combined.push(edamam1[i]);
         }
         return filterByProtein(combined.slice(0, count));
       }
       return filterByProtein(results);
     }
+
+    // TheMealDB parallel fetch has enough — use before cascading Spoonacular further
+    if (mealDb1.length >= 3) return filterByProtein(mealDb1.slice(0, count));
 
     // Edamam parallel fetch already has enough — use it before cascading further
     if (edamam1.length >= 3) return filterByProtein(edamam1.slice(0, count));

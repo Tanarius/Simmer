@@ -18,14 +18,14 @@ export async function sendPasswordResetEmail(toEmail: string, token: string): Pr
   }
 
   await resend.emails.send({
-    from: 'MealPrep <onboarding@resend.dev>',
+    from: 'Simmer <onboarding@resend.dev>',
     to: toEmail,
-    subject: 'Reset your MealPrep password',
+    subject: 'Reset your Simmer password',
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff">
         <div style="margin-bottom:24px">
           <span style="font-size:24px">🍳</span>
-          <span style="font-size:18px;font-weight:700;color:#111;margin-left:8px">MealPrep</span>
+          <span style="font-size:18px;font-weight:700;color:#111;margin-left:8px">Simmer</span>
         </div>
         <h1 style="font-size:22px;font-weight:700;color:#111;margin:0 0 8px">Reset your password</h1>
         <p style="color:#6b7280;margin:0 0 28px;line-height:1.6">

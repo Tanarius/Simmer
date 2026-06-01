@@ -10,7 +10,7 @@
  *   STRIPE_WEBHOOK_SECRET   — whsec_... (from Stripe Dashboard → Webhooks)
  *   STRIPE_PRICE_MONTHLY    — price_... for $6/month recurring
  *   STRIPE_PRICE_ANNUAL     — price_... for $49/year recurring
- *   CLIENT_URL              — full origin for success/cancel redirects (e.g. https://mealprep.up.railway.app)
+ *   CLIENT_URL              — full origin for success/cancel redirects (e.g. https://simmer.up.railway.app)
  */
 
 import { Router, Request, Response } from "express";

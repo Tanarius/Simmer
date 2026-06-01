@@ -38,7 +38,7 @@ const cuisineColors: Record<string, string> = {
   "american":      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   "mediterranean": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
   "indian":        "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
-  "other":         "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  "other":         "bg-stone-100 text-stone-700 dark:bg-stone-900/30 dark:text-stone-300",
 };
 
 const mealTypeLabels: Record<string, string> = {
@@ -131,10 +131,10 @@ function AddToWeekButton({ recipe }: { recipe: Recipe }) {
                     className={cn(
                       "w-7 h-7 rounded-md text-xs flex items-center justify-center transition-colors border",
                       isThis
-                        ? "bg-purple-600 border-purple-600 text-white"
+                        ? "bg-[#C96A3A] border-[#C96A3A] text-white"
                         : isFilled
                         ? "bg-muted border-border text-muted-foreground cursor-not-allowed opacity-50"
-                        : "border-border hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 text-muted-foreground"
+                        : "border-border hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 text-muted-foreground"
                     )}
                     title={isThis ? "Already planned here" : isFilled ? "Slot taken" : `Add to ${day} ${mealTime}`}
                   >
@@ -308,8 +308,8 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
                 quick:              {emoji:"⚡",cls:"bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-800"},
                 "make-ahead":       {emoji:"📦",cls:"bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800"},
                 "freezer-friendly": {emoji:"❄️",cls:"bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800"},
-                "one-pot":          {emoji:"🍲",cls:"bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800"},
-                "one-pan":          {emoji:"🍳",cls:"bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"},
+                "one-pot":          {emoji:"🍲",cls:"bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800"},
+                "one-pan":          {emoji:"🍳",cls:"bg-stone-100 text-stone-700 dark:bg-stone-900/30 dark:text-stone-300 border border-stone-200 dark:border-stone-800"},
                 "air-fryer":        {emoji:"🌬️",cls:"bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-800"},
                 grilled:            {emoji:"🔥",cls:"bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-800"},
               };

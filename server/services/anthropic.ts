@@ -120,7 +120,7 @@ async function executeClaudeCall(system: string, user: string, maxTokens = 1500)
 }
 
 export async function suggestRecipesFromPantry(ingredients: string[], userPrefs: UserPrefs): Promise<RecipeSuggestion[]> {
-  const systemPrompt = "You are an expert chef and meal planning assistant. You have access to web search — use it to find real recipes from cooking websites, blogs, and food publications. Always search the web before responding to find current, authentic recipes.";
+  const systemPrompt = "You are an expert chef and meal planning assistant. Suggest real, practical recipes based on the ingredients and preferences provided.";
   const moodLine = userPrefs.moodPreference ? `Mood/style: ${userPrefs.moodPreference}. ` : '';
   const userPrompt = `The user has these ingredients available: ${ingredients.join(", ")}. Their preferences: dietary restrictions: ${userPrefs.dietary?.join(",") || "none"}, cuisine preferences: ${userPrefs.cuisines?.join(",") || "any"}, cooking skill level: ${userPrefs.skillLevel || "beginner"}, max prep time: ${userPrefs.maxPrepTime || 60} minutes. ${moodLine}Find 3 recipe ideas that use primarily these ingredients. Return ONLY a JSON array with no markdown, no explanation, just the raw JSON array in this exact structure: [{ name: string, description: string, cuisineType: string, difficulty: 'easy'|'medium'|'hard', estimatedTime: number (minutes), servings: number, ingredients: [{ item: string, amount: string, unit: string, inPantry: boolean }], steps: [{ stepNumber: number, instruction: string, duration?: number }], missingIngredients: string[], tags: string[] }]`;
 

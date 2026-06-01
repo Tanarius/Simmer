@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Settings, Info, Loader2, X, Plus, ArrowRight,
   Home, Copy, Check, Link2, RefreshCw, LogOut,
-  Shield, ChevronDown, Eye, EyeOff, Sparkles, CreditCard,
+  Shield, ChevronDown, Eye, EyeOff, Sparkles, CreditCard, Camera,
 } from "lucide-react";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { DicebearAvatar, AVATAR_STYLES } from "@/components/DicebearAvatar";
 
 const CUISINES = [
   { key: "asian",          label: "Asian",           emoji: "🍜" },
@@ -33,7 +34,7 @@ function getInviteLink(code: string) {
 // Avatar with colored initials
 function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
   const colors = [
-    "from-purple-600 to-indigo-600",
+    "from-orange-600 to-amber-700",
     "from-orange-500 to-amber-500",
     "from-green-500 to-emerald-600",
     "from-pink-500 to-rose-600",
@@ -204,6 +205,10 @@ export default function ProfilePage() {
   const [newPw, setNewPw] = useState("");
   const [showPw, setShowPw] = useState(false);
 
+  // Avatar picker state
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [selectedAvatarStyle, setSelectedAvatarStyle] = useState<string | null>(null);
+
   // Billing state
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -254,6 +259,17 @@ export default function ProfilePage() {
     mutationFn: () => apiRequest("POST", "/api/household/leave").then(r => r.json()),
     onSuccess: () => { refetchHousehold(); queryClient.invalidateQueries({ queryKey: ["/api/household"] }); setConfirmLeave(false); toast({ title: "You've left the home" }); },
     onError: () => toast({ title: "Failed to leave", variant: "destructive" }),
+  });
+
+  const avatarMutation = useMutation({
+    mutationFn: (style: string) => apiRequest("PATCH", "/api/auth/avatar", { avatar: style }).then(r => r.json()),
+    onSuccess: (_, style) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setAvatarPickerOpen(false);
+      setSelectedAvatarStyle(null);
+      toast({ title: "Avatar updated" });
+    },
+    onError: (e: any) => toast({ title: "Failed to save avatar", description: e.message, variant: "destructive" }),
   });
 
   const changePassword = useMutation({
@@ -326,7 +342,25 @@ export default function ProfilePage() {
           {/* ── User identity card ────────────────────── */}
           <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
             <div className="flex items-center gap-4">
-              <Avatar name={user?.username ?? "?"} size="lg" />
+              {/* Avatar with change button */}
+              <div className="relative shrink-0">
+                <DicebearAvatar
+                  username={user?.username ?? "?"}
+                  avatarStyle={user?.avatar}
+                  size={56}
+                />
+                <button
+                  onClick={() => {
+                    setSelectedAvatarStyle(user?.avatar ?? null);
+                    setAvatarPickerOpen(o => !o);
+                  }}
+                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md hover:bg-primary/90 transition-colors"
+                  title="Change avatar"
+                >
+                  <Camera className="h-3 w-3" />
+                </button>
+              </div>
+
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold truncate">{user?.username}</h2>
                 {user?.email
@@ -365,6 +399,44 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
+
+            {/* Avatar picker */}
+            {avatarPickerOpen && (
+              <div className="mt-4 pt-4 border-t border-border/60">
+                <p className="text-xs font-medium mb-3 text-muted-foreground">Choose your avatar style — each one is unique to your username</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {AVATAR_STYLES.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedAvatarStyle(key)}
+                      className={cn(
+                        "flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all",
+                        selectedAvatarStyle === key
+                          ? "border-primary bg-primary/10 ring-1 ring-primary/50"
+                          : "border-border hover:border-muted-foreground/40 bg-muted/20"
+                      )}
+                    >
+                      <DicebearAvatar username={user?.username ?? "user"} avatarStyle={key} size={48} />
+                      <span className="text-[10px] text-muted-foreground leading-tight text-center">{label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={!selectedAvatarStyle || selectedAvatarStyle === user?.avatar || avatarMutation.isPending}
+                    onClick={() => selectedAvatarStyle && avatarMutation.mutate(selectedAvatarStyle)}
+                  >
+                    {avatarMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                    Save avatar
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setAvatarPickerOpen(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Stats row */}
             <div className="flex gap-3 mt-4 flex-wrap">
@@ -486,7 +558,7 @@ export default function ProfilePage() {
 
           {/* ── Cuisine Preferences ──────────────────── */}
           <Section
-            icon={<Sparkles className="h-4 w-4 text-purple-400" />}
+            icon={<Sparkles className="h-4 w-4 text-orange-400" />}
             title="Cuisine Preferences"
             subtitle="Influences AI recipe suggestions"
           >
@@ -502,7 +574,7 @@ export default function ProfilePage() {
                       className={cn(
                         "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all",
                         isLiked
-                          ? "bg-purple-600/20 border-purple-500/60 text-purple-200"
+                          ? "bg-orange-600/20 border-orange-500/60 text-orange-200"
                           : "bg-muted border-border text-muted-foreground hover:border-muted-foreground/50"
                       )}
                     >

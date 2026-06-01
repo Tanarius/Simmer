@@ -122,7 +122,7 @@ export default function AuthPage() {
         <CardHeader>
           <CardTitle>{mode === "login" ? "Welcome back" : "Create account"}</CardTitle>
           <CardDescription>
-            {mode === "login" ? "Sign in to your MealPrep account" : "Join MealPrep and start planning"}
+            {mode === "login" ? "Sign in to your Simmer account. Good things simmer." : "Join Simmer and start planning."}
           </CardDescription>
         </CardHeader>
         <CardContent>

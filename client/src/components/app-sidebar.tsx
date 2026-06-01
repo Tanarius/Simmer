@@ -1,5 +1,6 @@
 import { ChefHat, Calendar, ShoppingCart, Package, Sparkles, LogOut, Cookie, Home } from "lucide-react";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { DicebearAvatar } from "@/components/DicebearAvatar";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -58,7 +59,7 @@ export function AppSidebar() {
               viewBox="0 0 24 24"
               fill="none"
               className="w-5 h-5"
-              aria-label="MealPrep logo"
+              aria-label="Simmer logo"
             >
               {/* Fork */}
               <path
@@ -91,7 +92,7 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-base font-semibold text-sidebar-foreground">
-              {household?.name ?? "MealPrep"}
+              {household?.name ?? "Simmer"}
             </span>
             <span className="text-xs text-muted-foreground">
               {household
@@ -144,7 +145,7 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   asChild
                   isActive={location === "/profile"}
-                  className="bg-purple-600/10 text-purple-500 hover:bg-purple-600/20 hover:text-purple-600 transition-colors"
+                  className="bg-orange-600/10 text-orange-500 hover:bg-orange-600/20 hover:text-orange-600 transition-colors"
                 >
                   <Link href="/profile">
                     <Sparkles className="h-4 w-4" />
@@ -159,14 +160,34 @@ export function AppSidebar() {
 
       <SidebarFooter className="px-4 py-3 border-t border-sidebar-border space-y-2">
         {user && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1 bg-muted rounded-full px-2 py-0.5 font-mono tabular-nums">
-              AI {user.aiCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 5}
-            </span>
-            <span className="inline-flex items-center gap-1 bg-muted rounded-full px-2 py-0.5 font-mono tabular-nums">
-              Chat {user.copilotCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 20}
-            </span>
-          </div>
+          <>
+            {/* User row */}
+            <Link
+              href="/profile"
+              className="flex items-center gap-2.5 rounded-lg hover:bg-muted/50 transition-colors -mx-1 px-1 py-1 no-underline"
+              onClick={() => isMobile && setOpenMobile(false)}
+            >
+              <DicebearAvatar
+                username={user.username ?? "?"}
+                avatarStyle={user.avatar}
+                size={28}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate text-foreground">{user.username}</p>
+                <p className="text-[10px] text-muted-foreground capitalize">{user.subscriptionTier === "premium" ? "✦ Premium" : "Free plan"}</p>
+              </div>
+            </Link>
+
+            {/* Usage row */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 bg-muted rounded-full px-2 py-0.5 font-mono tabular-nums">
+                AI {user.aiCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 10}
+              </span>
+              <span className="inline-flex items-center gap-1 bg-muted rounded-full px-2 py-0.5 font-mono tabular-nums">
+                Chat {user.copilotCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 30}
+              </span>
+            </div>
+          </>
         )}
         <button
           onClick={() => logoutMutation.mutate()}
