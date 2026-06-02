@@ -473,6 +473,142 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
   }
 }
 
+// ── Text-query–driven search (used by Find Recipes) ───────────────────────────
+
+import type { ParsedQuery } from '../utils/parseRecipeQuery';
+
+/**
+ * Search recipes using a fully-parsed query.
+ * This is the new primary search path — takes structured ParsedQuery instead
+ * of wizard params. Has its own fallback chain.
+ */
+export async function searchRecipes(
+  parsed: ParsedQuery,
+  options: { number?: number; offset?: number; sort?: string } = {}
+): Promise<SpoonacularRecipe[]> {
+  const apiKey = process.env.SPOONACULAR_API_KEY;
+  const number = options.number ?? 12;
+
+  // TheMealDB-only fallback when no Spoonacular key
+  if (!apiKey) {
+    const params: CopilotSearchParams = {
+      vibe: parsed.tags.includes('healthy') ? 'healthy' : 'comfort food',
+      cuisineChoice: parsed.cuisine ?? undefined,
+      mealType: parsed.mealType ?? undefined,
+      count: number,
+    };
+    return searchTheMealDB(params);
+  }
+
+  const base: Record<string, any> = {
+    number,
+    offset: options.offset ?? 0,
+    addRecipeInformation: true,
+    fillIngredients: false,
+    apiKey,
+    sort: options.sort ?? (parsed.maxReadyTime ? 'time' : 'popularity'),
+  };
+
+  if (parsed.searchText) base.query = parsed.searchText;
+  if (parsed.cuisine) {
+    base.cuisine = parsed.cuisine;
+    if (parsed.excludeCuisine) base.excludeCuisine = parsed.excludeCuisine;
+  }
+  if (parsed.mealType) {
+    switch (parsed.mealType) {
+      case 'breakfast': base.type = 'breakfast'; break;
+      case 'lunch':
+      case 'dinner':    base.type = 'main course'; break;
+    }
+  }
+  if (parsed.maxReadyTime) base.maxReadyTime = parsed.maxReadyTime;
+  if (parsed.diet) base.diet = parsed.diet;
+
+  try {
+    // Attempt 1: exact params + TheMealDB in parallel for variety
+    const [spoonRes, mealDbRes] = await Promise.allSettled([
+      complexSearch(base),
+      searchTheMealDB({
+        vibe: 'comfort food',
+        cuisineChoice: parsed.cuisine,
+        mealType: parsed.mealType,
+        count: Math.ceil(number / 2),
+      }),
+    ]);
+    const spoon  = spoonRes.status  === 'fulfilled' ? spoonRes.value  : [];
+    const mealDb = mealDbRes.status === 'fulfilled' ? mealDbRes.value : [];
+
+    if (spoon.length >= 3) {
+      // Interleave TheMealDB results for variety
+      if (mealDb.length > 0) {
+        const combined: SpoonacularRecipe[] = [];
+        const max = Math.max(spoon.length, mealDb.length);
+        for (let i = 0; i < max; i++) {
+          if (i < spoon.length)  combined.push(spoon[i]);
+          if (i < mealDb.length) combined.push(mealDb[i]);
+        }
+        return combined.slice(0, number);
+      }
+      return spoon;
+    }
+
+    if (mealDb.length >= 3) return mealDb.slice(0, number);
+
+    // Attempt 2: relax time, keep cuisine + meal type
+    if (parsed.maxReadyTime) {
+      const relaxed = { ...base };
+      delete relaxed.maxReadyTime;
+      relaxed.sort = 'popularity';
+      relaxed.offset = Math.floor(Math.random() * 20);
+      const r2 = await complexSearch(relaxed);
+      if (r2.length >= 3) return r2;
+    }
+
+    // Attempt 3: drop meal type, keep cuisine + time
+    if (parsed.mealType) {
+      const noType = { ...base };
+      delete noType.type;
+      delete noType.maxReadyTime;
+      noType.sort = 'popularity';
+      noType.offset = Math.floor(Math.random() * 20);
+      const r3 = await complexSearch(noType);
+      if (r3.length >= 3) return r3;
+    }
+
+    // Attempt 4: cuisine only — broadest possible with cuisine maintained
+    if (parsed.cuisine) {
+      const cuisineOnly: Record<string, any> = {
+        number, addRecipeInformation: true, fillIngredients: false,
+        apiKey, sort: 'popularity',
+        cuisine: base.cuisine,
+        ...(base.excludeCuisine ? { excludeCuisine: base.excludeCuisine } : {}),
+      };
+      const r4 = await complexSearch(cuisineOnly);
+      if (r4.length > 0) return r4;
+    }
+
+    // Final: TheMealDB only
+    if (mealDb.length > 0) return mealDb;
+    return searchTheMealDB({ vibe: 'comfort food', count: number });
+
+  } catch (err: any) {
+    console.error('searchRecipes failed:', err?.message);
+    return searchTheMealDB({
+      vibe: 'comfort food',
+      cuisineChoice: parsed.cuisine,
+      mealType: parsed.mealType,
+      count: number,
+    });
+  }
+}
+
+// ── Cuisine-specific emoji fallback ───────────────────────────────────────────
+export const CUISINE_EMOJI: Record<string, string> = {
+  american: '🍔', italian: '🍝', mexican: '🌮', 'tex-mex': '🌮',
+  asian: '🍜', chinese: '🍜', japanese: '🍣', korean: '🌶️', thai: '🍛',
+  indian: '🍛', mediterranean: '🥗', french: '🥐', default: '🍽️',
+};
+
 function parseSpoonacularResult(r: any): SpoonacularRecipe {
   // Image: use 636x393 for good quality
   const imageUrl = r.image

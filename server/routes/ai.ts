@@ -8,7 +8,8 @@ import {
 } from "../services/anthropic";
 import { chatWithCopilot } from "../services/copilot";
 import { cleanRecipe } from "../services/recipeCleaner";
-import { searchRecipesForCopilot, enrichWithNutrition, type SpoonacularRecipe } from "../services/spoonacular";
+import { searchRecipesForCopilot, searchRecipes, enrichWithNutrition, type SpoonacularRecipe } from "../services/spoonacular";
+import { parseRecipeQuery, cuisineChipToQuery } from "../utils/parseRecipeQuery";
 import { storage } from "../storage";
 import { aiCache, TTL_24H } from "../utils/cache";
 import { detectTags } from "../utils/autoTag";
@@ -184,26 +185,41 @@ router.post("/copilot/execute-tool", copilotRateLimit, async (req, res, next) =>
 // Find real recipes via Spoonacular (no AI hallucination — real photos, real URLs)
 router.post("/copilot/find-recipes", copilotRateLimit, async (req, res, next) => {
   try {
-    const { cuisineChoice, vibe, mealType, protein, attempt = 0 } = req.body;
+    const { query, cuisineChoice, mealType, maxReadyTime, vibe, protein, attempt = 0 } = req.body;
     const userId = (req.user as any).id;
 
-    const tasteProfile = await storage.getUserTasteProfile(userId);
-    const avoidedIngredients: string[] = tasteProfile?.dislikedIngredients || [];
+    // Taste profile is NOT used to filter search results — only for AI suggestions.
+    // Users must be able to search any cuisine regardless of onboarding preferences.
 
-    const recipes = await searchRecipesForCopilot({
-      vibe: vibe || 'comfort food',
-      cuisineChoice,
-      mealType,
-      protein,
-      avoidedIngredients,
-      count: 10,
-      attempt,
-    });
+    let foundRecipes: SpoonacularRecipe[];
+
+    if (query?.trim()) {
+      // Text-query path: parse the query, then overlay explicit chip selections
+      const parsed = parseRecipeQuery(query);
+      if (cuisineChoice && cuisineChoice !== 'surprise') {
+        const { cuisine, excludeCuisine } = cuisineChipToQuery(cuisineChoice);
+        parsed.cuisine = cuisine;
+        if (excludeCuisine) parsed.excludeCuisine = excludeCuisine;
+      }
+      if (mealType) parsed.mealType = mealType;
+      if (maxReadyTime) parsed.maxReadyTime = Number(maxReadyTime);
+      foundRecipes = await searchRecipes(parsed, { number: 12 });
+    } else {
+      // Wizard/chip-only path (no text query)
+      foundRecipes = await searchRecipesForCopilot({
+        vibe: vibe || 'comfort food',
+        cuisineChoice,
+        mealType,
+        protein,
+        avoidedIngredients: [],  // PART 2: taste profile removed from search
+        count: 12,
+        attempt,
+      });
+    }
 
     const usage = await storage.getUserAiUsage(userId);
     const callsRemaining = getCopilotCallsRemaining(usage.subscriptionTier, usage.copilotCallsToday);
-
-    res.json({ recipes, callsRemaining });
+    res.json({ recipes: foundRecipes, callsRemaining });
   } catch (err) {
     next(err);
   }
@@ -254,13 +270,24 @@ router.post("/copilot/save-recipe", copilotRateLimit, async (req, res, next) => 
     storage.logActivity((req.user as any).id, "recipe_added", saved.id, saved.name);
     res.json({ success: true, recipe: saved });
 
-    // Fire-and-forget nutrition enrichment — don't block the response
+    // Fire-and-forget: nutrition + image fallback
     const ingredientNames = ingredients.map(i => i.name);
     enrichWithNutrition(recipe.title, ingredientNames).then(nutrition => {
-      if (nutrition) {
-        storage.updateRecipeNutrition(saved.id, JSON.stringify(nutrition)).catch(() => {});
-      }
+      if (nutrition) storage.updateRecipeNutrition(saved.id, JSON.stringify(nutrition)).catch(() => {});
     }).catch(() => {});
+
+    if (!recipe.imageUrl) {
+      const { CUISINE_EMOJI } = await import('../services/spoonacular');
+      const emoji = CUISINE_EMOJI[cuisineNorm] ?? '🍽️';
+      // Try Spoonacular first, fall back to emoji
+      searchRecipes({ searchText: recipe.title, cuisine: cuisineNorm, tags: [] }, { number: 1 })
+        .then(results => {
+          const imgUrl = results[0]?.imageUrl || emoji;
+          storage.updateRecipe(saved.id, (req.user as any).householdId, { imageUrl: imgUrl } as any).catch(() => {});
+        }).catch(() => {
+          storage.updateRecipe(saved.id, (req.user as any).householdId, { imageUrl: emoji } as any).catch(() => {});
+        });
+    }
   } catch (err) {
     next(err);
   }
