@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+﻿import Anthropic from "@anthropic-ai/sdk";
 import { enrichWithNutrition, NutritionData } from "./spoonacular";
 
 const anthropic = new Anthropic({
@@ -104,12 +104,12 @@ async function executeClaudeCall(system: string, user: string, maxTokens = 1500)
     console.error("Anthropic Call Error:", err?.status, err?.message, err?.error);
     // Surface auth/quota errors as non-500 so the client sees a useful message
     if (err.status === 401) {
-      const e: any = new Error("AI service authentication failed — check ANTHROPIC_API_KEY");
+      const e: any = new Error("AI service authentication failed â€” check ANTHROPIC_API_KEY");
       e.status = 503;
       throw e;
     }
     if (err.status === 429) {
-      const e: any = new Error("AI rate limit reached — try again later");
+      const e: any = new Error("AI rate limit reached â€” try again later");
       e.status = 429;
       throw e;
     }
@@ -124,7 +124,7 @@ export async function suggestRecipesFromPantry(ingredients: string[], userPrefs:
   const moodLine = userPrefs.moodPreference ? `Mood/style: ${userPrefs.moodPreference}. ` : '';
   const userPrompt = `The user has these ingredients available: ${ingredients.join(", ")}. Their preferences: dietary restrictions: ${userPrefs.dietary?.join(",") || "none"}, cuisine preferences: ${userPrefs.cuisines?.join(",") || "any"}, cooking skill level: ${userPrefs.skillLevel || "beginner"}, max prep time: ${userPrefs.maxPrepTime || 60} minutes. ${moodLine}Find 3 recipe ideas that use primarily these ingredients. Return ONLY a JSON array with no markdown, no explanation, just the raw JSON array in this exact structure: [{ name: string, description: string, cuisineType: string, difficulty: 'easy'|'medium'|'hard', estimatedTime: number (minutes), servings: number, ingredients: [{ item: string, amount: string, unit: string, inPantry: boolean }], steps: [{ stepNumber: number, instruction: string, duration?: number }], missingIngredients: string[], tags: string[] }]`;
 
-  // 3 full recipes with steps need headroom — 1500 reliably truncates JSON
+  // 3 full recipes with steps need headroom â€” 1500 reliably truncates JSON
   const parsedResponse = await executeClaudeCall(systemPrompt, userPrompt, 4096) as RecipeSuggestion[];
 
   // Run SPOONACULAR in parallel
@@ -176,34 +176,34 @@ export async function selectWeeklyMeals(
 
   // Build household cooking style rules
   const styleRules: string[] = [];
-  const isMealPrep = cookingStyles.includes('meal-prep');
+  const isBatchCook = cookingStyles.includes('meal-prep');
   const isCrockpot = cookingStyles.includes('crockpot');
   const isQuick = cookingStyles.includes('quick') && !cookingStyles.includes('classic');
 
-  if (isMealPrep) {
-    styleRules.push('This household MEAL PREPS. Schedule the same recipe ID across 3–5 slots — they batch cook and portion it across days. Include at least one recipe repeated 3+ times.');
+  if (isBatchCook) {
+    styleRules.push('This household MEAL PREPS. Schedule the same recipe ID across 3â€“5 slots â€” they batch cook and portion it across days. Include at least one recipe repeated 3+ times.');
   }
   if (isCrockpot) {
-    styleRules.push('This household uses a crockpot. Prioritise recipes whose tags include "crockpot" or "slow-cook" for non-busy days — these make large portions great for multiple servings.');
+    styleRules.push('This household uses a crockpot. Prioritise recipes whose tags include "crockpot" or "slow-cook" for non-busy days â€” these make large portions great for multiple servings.');
   }
   if (isQuick) {
     styleRules.push('This household prefers quick meals. Strongly prefer recipes with low totalTime throughout the week.');
   }
 
-  const systemPrompt = `You are a meal planning assistant. Select meals ONLY from the provided recipe library — never invent new recipes or names. Always return valid recipe IDs from the list.`;
+  const systemPrompt = `You are a meal planning assistant. Select meals ONLY from the provided recipe library â€” never invent new recipes or names. Always return valid recipe IDs from the list.`;
 
   const userPrompt = `Select recipes from this library to fill the week's meal plan.
 
 Recipe library:
 ${JSON.stringify(recipeList)}
 
-Fill these slots (key: slot name, busy means prefer totalTime ≤ 30):
-${slots.map(s => `${s.key}${s.busy ? " (busy — prefer ≤30 min)" : ""}`).join(", ")}
+Fill these slots (key: slot name, busy means prefer totalTime â‰¤ 30):
+${slots.map(s => `${s.key}${s.busy ? " (busy â€” prefer â‰¤30 min)" : ""}`).join(", ")}
 
 Rules:
-- ONLY use recipe IDs from the library above — never invent a recipe
+- ONLY use recipe IDs from the library above â€” never invent a recipe
 - Vary cuisines and mealTypes throughout the week where possible
-- ${isMealPrep ? 'ENCOURAGE repeating recipe IDs (meal prep portioning)' : 'Try not to repeat the same recipe ID more than twice'}
+- ${isBatchCook ? 'ENCOURAGE repeating recipe IDs (meal prep portioning)' : 'Try not to repeat the same recipe ID more than twice'}
 - For busy slots prefer low totalTime; for dinner prefer mealType "dinner" or "either"
 - Avoid these recently used recipe IDs if possible: [${recentMealIds.join(", ")}]
 ${styleRules.map(r => `- ${r}`).join('\n')}
@@ -213,7 +213,7 @@ Example: {"mon_lunch": 3, "mon_dinner": 7, "tue_lunch": 12}`;
 
   const result = await executeClaudeCall(systemPrompt, userPrompt, 400);
 
-  // Validate — strip any IDs that don't exist in the library
+  // Validate â€” strip any IDs that don't exist in the library
   const validIds = new Set(recipes.map(r => r.id));
   const cleaned: Record<string, number> = {};
   for (const [key, val] of Object.entries(result)) {
@@ -233,7 +233,8 @@ export async function optimizeShoppingList(rawItems: string[], pantryItems: stri
 
 export async function autoTagRecipe(recipeName: string, ingredients: string[], steps: string[]): Promise<RecipeTags> {
   const systemPrompt = "You are a recipe categorization assistant. Analyze recipes and return accurate metadata.";
-  const userPrompt = `Analyze this recipe — Name: ${recipeName}. Ingredients: ${ingredients.join(", ")}. Steps: ${steps.join(" ")}. Return ONLY raw JSON: { prepTime: number, cookTime: number, totalTime: number, cuisineType: string, difficulty: 'easy'|'medium'|'hard', dietaryFlags: string[] (e.g. 'vegetarian','vegan','gluten-free','dairy-free','nut-free'), mealType: 'breakfast'|'lunch'|'dinner'|'snack', servingSuggestion: string }`;
+  const userPrompt = `Analyze this recipe â€” Name: ${recipeName}. Ingredients: ${ingredients.join(", ")}. Steps: ${steps.join(" ")}. Return ONLY raw JSON: { prepTime: number, cookTime: number, totalTime: number, cuisineType: string, difficulty: 'easy'|'medium'|'hard', dietaryFlags: string[] (e.g. 'vegetarian','vegan','gluten-free','dairy-free','nut-free'), mealType: 'breakfast'|'lunch'|'dinner'|'snack', servingSuggestion: string }`;
 
   return (await executeClaudeCall(systemPrompt, userPrompt)) as RecipeTags;
 }
+

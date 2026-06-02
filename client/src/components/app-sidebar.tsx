@@ -54,50 +54,16 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="px-4 py-4">
         <Link href="/" className="flex items-center gap-2.5 no-underline">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground shrink-0">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="w-5 h-5"
-              aria-label="Simmer logo"
-            >
-              {/* Fork */}
-              <path
-                d="M5 2v6c0 1.1.9 2 2 2h0v12"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-              <path
-                d="M5 2v4M7 2v4M5 6h2"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-              />
-              {/* Knife */}
-              <path
-                d="M19 2v20"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-              <path
-                d="M19 2c0 0-3 3-3 7h3"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+          {/* TODO: Replace with <SimmerLogo /> SVG component */}
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#C96A3A] text-white font-bold text-base shrink-0 select-none">
+            S
           </div>
           <div className="flex flex-col leading-none">
-            <span className="text-base font-semibold text-sidebar-foreground">
-              {household?.name ?? "Simmer"}
-            </span>
+            <span className="text-sm font-bold text-[#F5EDE3]">Simmer</span>
             <span className="text-xs text-muted-foreground">
-              {household
-                ? `${household.members.length} ${household.members.length === 1 ? "member" : "members"}`
-                : "Your home"}
+              {household?.name
+                ? `${household.name} · ${household.members.length} ${household.members.length === 1 ? "member" : "members"}`
+                : "Your household"}
             </span>
           </div>
         </Link>

@@ -1,12 +1,12 @@
-{
-  "name": "MealPrep",
-  "short_name": "MealPrep",
-  "description": "AI meal planning for your household",
+﻿{
+  "name": "Simmer",
+  "short_name": "Simmer",
+  "description": "Meal planning for real households. Good things simmer.",
   "start_url": "/#/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#f97316",
-  "background_color": "#0a0a0c",
+  "theme_color": "#C96A3A",
+  "background_color": "#1C1410",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -24,3 +24,4 @@
   "screenshots": [],
   "categories": ["food", "lifestyle", "productivity"]
 }
+

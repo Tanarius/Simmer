@@ -1,6 +1,6 @@
-services:
+﻿services:
   - type: web
-    name: mealprep
+    name: simmer
     runtime: node
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -15,3 +15,4 @@ services:
         sync: false
       - key: SESSION_SECRET
         sync: false
+

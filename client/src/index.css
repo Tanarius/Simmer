@@ -79,12 +79,12 @@
   --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
-  --background: 25 12% 9%;
+  --background: 24 30% 9%;
   --foreground: 35 15% 90%;
-  --border: 25 8% 18%;
-  --card: 25 10% 11%;
+  --border: 24 24% 19%;
+  --card: 24 24% 13%;
   --card-foreground: 35 15% 90%;
-  --card-border: 25 8% 16%;
+  --card-border: 24 24% 19%;
   --sidebar: 25 10% 12%;
   --sidebar-foreground: 35 15% 90%;
   --sidebar-border: 25 8% 17%;
@@ -145,6 +145,24 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  /* Subtle warm depth gradient on main content in dark mode */
+  .dark main {
+    background: radial-gradient(ellipse at top center, #2A1F18 0%, #1C1410 60%);
+    background-attachment: fixed;
+  }
+
+  /* Sidebar separation */
+  .dark [data-sidebar="sidebar"] {
+    border-right: 1px solid #3D2E24 !important;
+  }
+
+  /* Card surface lift — slightly more visible border in dark mode */
+  .dark .rounded-xl,
+  .dark .rounded-2xl,
+  .dark .rounded-3xl {
+    --tw-border-opacity: 1;
   }
 }
 

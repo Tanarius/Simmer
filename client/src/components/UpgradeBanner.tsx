@@ -30,7 +30,7 @@ export function UpgradeBanner() {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-b border-amber-500/20 px-4 py-2 text-xs shrink-0">
+      <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-b border-amber-500/20 border-l-[3px] border-l-[#C96A3A] px-4 py-2 text-xs shrink-0">
         <button
           onClick={() => setUpgradeOpen(true)}
           className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium"
