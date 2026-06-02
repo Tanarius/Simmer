@@ -42,7 +42,7 @@ const CUISINE_COLORS: Record<string, string> = {
   "american":      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   "mediterranean": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
   "indian":        "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
-  "other":         "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  "other":         "bg-stone-100 text-stone-700 dark:bg-stone-900/30 dark:text-stone-300",
 };
 
 function getMondayOfWeek(date: Date): Date {
@@ -207,7 +207,13 @@ interface SlotProps {
 }
 
 function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isPending, onMobileTap, addedBy, slotReactions, currentUserId, onReact }: SlotProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: slotKey });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: slotKey });
+  // Make filled slots draggable so they can be moved between days
+  const { setNodeRef: setDragRef, listeners: dragListeners, attributes: dragAttributes, isDragging } = useDraggable({
+    id: `slot-${slotKey}`,
+    data: { fromSlot: slotKey },
+    disabled: typeof mealValue !== "number",
+  });
   const [open, setOpen] = useState(false);
 
   const recipe = typeof mealValue === "number" ? recipes.find(r => r.id === mealValue) ?? null : null;
@@ -233,18 +239,21 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
     const hasImg = !!recipe?.imageUrl && !imgErr;
     return (
       <div
-        ref={setNodeRef}
+        ref={node => { setDropRef(node); setDragRef(node); }}
         className={cn(
           "relative group rounded-xl overflow-hidden min-h-[88px] h-full transition-all",
-          isOver && "ring-2 ring-primary scale-[1.02]",
+          isOver && !isDragging && "ring-2 ring-primary scale-[1.02]",
+          isDragging ? "opacity-30 cursor-grabbing" : recipe ? "cursor-grab" : "",
         )}
         data-testid={`slot-filled-${slotKey}`}
-        onClick={onMobileTap}
+        onClick={!isDragging ? onMobileTap : undefined}
+        {...(recipe ? dragListeners : {})}
+        {...(recipe ? dragAttributes : {})}
       >
         {hasImg ? (
           <img src={recipe!.imageUrl!} alt="" className="absolute inset-0 w-full h-full object-cover" onError={() => setImgErr(true)} />
         ) : (
-          <div className={cn("absolute inset-0 bg-gradient-to-br", recipe ? gradient : "from-purple-900 to-indigo-900")} />
+          <div className={cn("absolute inset-0 bg-gradient-to-br", recipe ? gradient : "from-stone-900 to-stone-800")} />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/10" />
 
@@ -265,7 +274,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
                 )}
               </div>
             ) : (
-              <span className="text-[10px] px-1.5 py-px rounded-full w-fit bg-purple-500/50 text-purple-200 font-medium">AI</span>
+              <span className="text-[10px] px-1.5 py-px rounded-full w-fit bg-orange-500/50 text-orange-200 font-medium">AI</span>
             )}
             <p className="text-white text-xs font-semibold leading-snug line-clamp-2">{recipe ? recipe.name : aiName}</p>
             {recipe && total > 0 && (
@@ -326,6 +335,13 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
           </div>
         )}
 
+        {/* Drag handle hint — shown on hover so users know the slot is draggable */}
+        {recipe && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-40 transition-opacity pointer-events-none select-none text-white text-xs">
+            ⠿
+          </div>
+        )}
+
         {/* Remove — hover on desktop, always visible on touch */}
         <button
           onClick={e => { e.stopPropagation(); onClear(); }}
@@ -342,7 +358,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
   if (onMobileTap) {
     return (
       <div
-        ref={setNodeRef}
+        ref={setDropRef}
         className={cn(
           "rounded-xl min-h-[88px] h-full border-2 border-dashed transition-all cursor-pointer",
           "flex flex-col items-center justify-center gap-1",
@@ -364,7 +380,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div
-          ref={setNodeRef}
+          ref={setDropRef}
           className={cn(
             "rounded-xl min-h-[88px] h-full border-2 border-dashed transition-all cursor-pointer",
             "flex flex-col items-center justify-center gap-1",
@@ -512,23 +528,58 @@ export default function PlannerPage() {
   }
 
   function handleDragStart(event: DragStartEvent) {
-    setActiveDragRecipe(event.active.data.current?.recipe ?? null);
+    const sidebarRecipe = event.active.data.current?.recipe as Recipe | undefined;
+    if (sidebarRecipe) {
+      setActiveDragRecipe(sidebarRecipe);
+    } else {
+      // Slot drag — look up the recipe from the source slot key
+      const fromSlot = event.active.data.current?.fromSlot as MealSlotKey | undefined;
+      if (fromSlot) {
+        const recipeId = currentMeals[fromSlot];
+        setActiveDragRecipe(typeof recipeId === "number" ? (recipes?.find(r => r.id === recipeId) ?? null) : null);
+      }
+    }
   }
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveDragRecipe(null);
     const { active, over } = event;
     if (!over) return;
-    const slotKey = over.id as MealSlotKey;
-    const recipe  = active.data.current?.recipe as Recipe | undefined;
-    if (recipe && slotKey) {
-      const updated = { ...currentMeals, [slotKey]: recipe.id };
-      const updatedMeta: MealMetaMap = { ...currentMeta };
-      if (currentUser?.username) {
-        (updatedMeta as any)[slotKey] = { addedBy: currentUser.username };
+
+    const toSlotKey = over.id as MealSlotKey;
+    const fromSlotKey = active.data.current?.fromSlot as MealSlotKey | undefined;
+    const sidebarRecipe = active.data.current?.recipe as Recipe | undefined;
+
+    const updated: MealsMap = { ...currentMeals };
+    const updatedMeta: MealMetaMap = { ...currentMeta };
+
+    if (fromSlotKey) {
+      // ── Slot → slot ──────────────────────────────────────────────────────
+      if (fromSlotKey === toSlotKey) return; // dropped on itself
+      const fromValue = currentMeals[fromSlotKey];
+      if (typeof fromValue !== "number") return;
+      const toValue = currentMeals[toSlotKey];
+      // Place dragged recipe in destination
+      updated[toSlotKey] = fromValue;
+      if (currentUser?.username) (updatedMeta as any)[toSlotKey] = { addedBy: currentUser.username };
+      if (toValue !== undefined) {
+        // Destination was filled → swap
+        updated[fromSlotKey] = toValue;
+        if (currentUser?.username) (updatedMeta as any)[fromSlotKey] = { addedBy: currentUser.username };
+      } else {
+        // Destination was empty → move (clear source)
+        delete updated[fromSlotKey];
+        delete (updatedMeta as any)[fromSlotKey];
       }
-      savePlanMutation.mutate({ meals: updated, mealMeta: updatedMeta });
+    } else if (sidebarRecipe) {
+      // ── Sidebar → slot ───────────────────────────────────────────────────
+      updated[toSlotKey] = sidebarRecipe.id;
+      if (currentUser?.username) (updatedMeta as any)[toSlotKey] = { addedBy: currentUser.username };
+    } else {
+      return;
     }
+
+    savePlanMutation.mutate({ meals: updated, mealMeta: updatedMeta });
   }
 
   function quickFill() {

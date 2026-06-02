@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+﻿import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 
 export default function PrivacyPage() {
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
               <li>Delete your account and all associated data</li>
               <li>Export your recipe library (contact us)</li>
             </ul>
-            <p className="mt-3">To exercise these rights, use the account settings in the app or contact us at <a href="mailto:support@mealprep.app" className="text-primary hover:underline">support@mealprep.app</a>.</p>
+            <p className="mt-3">To exercise these rights, use the account settings in the app or contact us at <a href="mailto:support@Simmer.app" className="text-primary hover:underline">support@Simmer.app</a>.</p>
           </section>
 
           <section>
@@ -102,16 +102,17 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold mb-3">13. Contact</h2>
-            <p>For privacy inquiries: <a href="mailto:support@mealprep.app" className="text-primary hover:underline">support@mealprep.app</a></p>
+            <p>For privacy inquiries: <a href="mailto:support@Simmer.app" className="text-primary hover:underline">support@Simmer.app</a></p>
           </section>
 
         </div>
 
         <div className="mt-12 pt-8 border-t border-border text-xs text-muted-foreground flex gap-4">
           <Link href="/terms" className="hover:underline">Terms of Service</Link>
-          <Link href="/" className="hover:underline">Back to MealPrep</Link>
+          <Link href="/" className="hover:underline">Back to Simmer</Link>
         </div>
       </div>
     </div>
   );
 }
+

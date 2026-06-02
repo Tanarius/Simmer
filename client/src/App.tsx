@@ -1,3 +1,13 @@
+import * as Sentry from "@sentry/react";
+
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    environment: import.meta.env.MODE,
+    tracesSampleRate: 0.1,
+  });
+}
+
 import React from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
@@ -24,6 +34,7 @@ import OnboardingPage from "@/pages/onboarding";
 import ResetPasswordPage from "@/pages/reset-password";
 import LandingPage from "@/pages/landing";
 import SnacksPage from "@/pages/snacks";
+import HomePage from "@/pages/home";
 import TermsPage from "@/pages/terms";
 import PrivacyPage from "@/pages/privacy";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -64,7 +75,8 @@ function AppRouter() {
 
   return (
     <Switch>
-      <Route path="/" component={RecipesPage} />
+      <Route path="/" component={HomePage} />
+      <Route path="/recipes" component={RecipesPage} />
       <Route path="/planner" component={PlannerPage} />
       <Route path="/shopping" component={ShoppingPage} />
       <Route path="/pantry" component={PantryPage} />
@@ -94,6 +106,16 @@ function NoEmailBanner() {
   );
 }
 
+// Resets ErrorBoundary on every route change by using location as the key
+function BoundedRouter() {
+  const [location] = useLocation();
+  return (
+    <ErrorBoundary key={location}>
+      <AppRouter />
+    </ErrorBoundary>
+  );
+}
+
 function AppLayout() {
   useTheme();
 
@@ -117,9 +139,7 @@ function AppLayout() {
               <UpgradeBanner />
             </header>
             <main className="flex-1 overflow-auto">
-              <ErrorBoundary>
-                <AppRouter />
-              </ErrorBoundary>
+              <BoundedRouter />
             </main>
           </div>
         </div>

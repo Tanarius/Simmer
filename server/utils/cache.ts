@@ -42,8 +42,19 @@ class InMemCache {
   clear() {
     this.store.clear();
   }
+
+  /** Evict all expired entries. Called periodically by background interval. */
+  evictExpired() {
+    const now = Date.now();
+    for (const [key, entry] of this.store) {
+      if (now > entry.expiry) this.store.delete(key);
+    }
+  }
 }
 
 export const aiCache = new InMemCache();
 // 24 hours in MS
 export const TTL_24H = 24 * 60 * 60 * 1000;
+
+// Evict expired entries every 10 minutes to prevent unbounded growth
+setInterval(() => aiCache.evictExpired(), 10 * 60 * 1000).unref();

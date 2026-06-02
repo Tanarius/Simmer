@@ -120,7 +120,7 @@ export default function RecipesPage() {
           </div>
           <button
             onClick={() => setCopilotOpen(true)}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-sm shadow-violet-500/20 transition-all"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-[#C96A3A] hover:bg-[#A85530] text-white shadow-sm transition-all"
             data-testid="button-find-recipes"
           >
             <Sparkles className="h-4 w-4" />
@@ -216,8 +216,8 @@ export default function RecipesPage() {
         ) : recipes?.length === 0 ? (
           /* Library is empty — guide new users */
           <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-500/20">
-              <ChefHat className="h-8 w-8 text-violet-400" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500/20 to-amber-500/20 border border-orange-500/20">
+              <ChefHat className="h-8 w-8 text-orange-400" />
             </div>
             <div>
               <p className="text-base font-semibold">Your recipe library is empty</p>
@@ -226,7 +226,7 @@ export default function RecipesPage() {
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={() => setCopilotOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold hover:from-violet-500 hover:to-indigo-500 shadow-md shadow-violet-500/20 transition-all"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C96A3A] hover:bg-[#A85530] text-white text-sm font-semibold shadow-md transition-all"
               >
                 <Sparkles className="h-4 w-4" /> Find Recipes
               </button>
@@ -264,7 +264,7 @@ export default function RecipesPage() {
       {/* Mobile floating Find Recipes button — hidden on sm+ where the banner is visible */}
       <button
         onClick={() => setCopilotOpen(true)}
-        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 h-11 rounded-full shadow-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-violet-500/30 sm:hidden"
+        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 h-11 rounded-full shadow-xl text-sm font-semibold bg-[#C96A3A] hover:bg-[#A85530] text-white sm:hidden"
         data-testid="button-find-recipes-float"
       >
         <Sparkles className="h-4 w-4" />

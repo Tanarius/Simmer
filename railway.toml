@@ -1,0 +1,41 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm install && npm run build"
+
+[deploy]
+startCommand = "npm start"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# ── Required environment variables ──────────────────────────────────────────
+# Set all of these in the Railway dashboard under Variables.
+# The app will crash on startup if any marked REQUIRED are missing.
+#
+# REQUIRED
+#   DATABASE_URL          Neon PostgreSQL connection string
+#   SESSION_SECRET        Random secret for express-session (min 32 chars)
+#   ANTHROPIC_API_KEY     Claude AI — powers Copilot and recipe features
+#   CLIENT_URL            Full public URL of this app, e.g. https://simmer.app
+#                         Used for Stripe redirect URLs. App crashes without this.
+#
+# REQUIRED FOR BILLING (soft-warn on start if missing, Stripe routes will fail)
+#   STRIPE_SECRET_KEY
+#   STRIPE_WEBHOOK_SECRET
+#   STRIPE_PRICE_MONTHLY
+#   STRIPE_PRICE_ANNUAL
+#
+# REQUIRED FOR PASSWORD RESET (silently falls back to console.log if missing)
+#   RESEND_API_KEY        Resend email service API key
+#
+# OPTIONAL — recipe search (app works without these, fewer recipes returned)
+#   SPOONACULAR_API_KEY   365k recipes + URL import + image search
+#   EDAMAM_APP_ID         2.3M recipes (paid plan required)
+#   EDAMAM_APP_KEY        Pair with EDAMAM_APP_ID
+#
+# OPTIONAL — email link base URL (Railway sets RAILWAY_PUBLIC_DOMAIN automatically)
+#   APP_URL               Override base URL used in password reset emails
+#
+# OPTIONAL — error monitoring (Sentry free tier, strongly recommended)
+#   SENTRY_DSN            Server-side error tracking (from sentry.io project settings)
+#   VITE_SENTRY_DSN       Client-side error tracking — must be set at BUILD TIME
+#                         In Railway: set as a build variable, not a runtime variable

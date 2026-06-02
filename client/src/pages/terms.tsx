@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+﻿import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 
 export default function TermsPage() {
@@ -17,12 +17,12 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-lg font-semibold mb-3">1. Acceptance of Terms</h2>
-            <p>By creating an account or using MealPrep ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
+            <p>By creating an account or using Simmer ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
           </section>
 
           <section>
             <h2 className="text-lg font-semibold mb-3">2. Description of Service</h2>
-            <p>MealPrep is a household meal planning application that provides AI-assisted recipe discovery, weekly meal planning, shopping list generation, and pantry management. Some features require a paid Premium subscription.</p>
+            <p>Simmer is a household meal planning application that provides AI-assisted recipe discovery, weekly meal planning, shopping list generation, and pantry management. Some features require a paid Premium subscription.</p>
           </section>
 
           <section>
@@ -37,7 +37,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-lg font-semibold mb-3">4. Subscriptions and Billing</h2>
-            <p className="mb-3">MealPrep offers a free tier and a Premium subscription ($6/month or $49/year). Billing is processed by Stripe. By subscribing, you agree to recurring charges until you cancel.</p>
+            <p className="mb-3">Simmer offers a free tier and a Premium subscription ($6/month or $49/year). Billing is processed by Stripe. By subscribing, you agree to recurring charges until you cancel.</p>
             <ul className="list-disc list-inside space-y-2 text-foreground/80">
               <li>You may cancel your subscription at any time through the billing portal.</li>
               <li>Cancellation takes effect at the end of your current billing period.</li>
@@ -65,7 +65,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-lg font-semibold mb-3">7. AI Features</h2>
-            <p>MealPrep uses AI to suggest recipes and assist with meal planning. AI suggestions are provided "as is" — you should verify ingredients, allergens, and cooking instructions before use. We are not responsible for the accuracy of AI-generated content.</p>
+            <p>Simmer uses AI to suggest recipes and assist with meal planning. AI suggestions are provided "as is" â€” you should verify ingredients, allergens, and cooking instructions before use. We are not responsible for the accuracy of AI-generated content.</p>
           </section>
 
           <section>
@@ -75,7 +75,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-lg font-semibold mb-3">9. Limitation of Liability</h2>
-            <p>To the fullest extent permitted by law, MealPrep shall not be liable for indirect, incidental, special, or consequential damages arising from your use of the Service, including but not limited to loss of data or loss of profits.</p>
+            <p>To the fullest extent permitted by law, Simmer shall not be liable for indirect, incidental, special, or consequential damages arising from your use of the Service, including but not limited to loss of data or loss of profits.</p>
           </section>
 
           <section>
@@ -85,16 +85,17 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-lg font-semibold mb-3">11. Contact</h2>
-            <p>For questions about these Terms, contact us at <a href="mailto:support@mealprep.app" className="text-primary hover:underline">support@mealprep.app</a>.</p>
+            <p>For questions about these Terms, contact us at <a href="mailto:support@simmer.app" className="text-primary hover:underline">support@simmer.app</a>.</p>
           </section>
 
         </div>
 
         <div className="mt-12 pt-8 border-t border-border text-xs text-muted-foreground flex gap-4">
           <Link href="/privacy" className="hover:underline">Privacy Policy</Link>
-          <Link href="/" className="hover:underline">Back to MealPrep</Link>
+          <Link href="/" className="hover:underline">Back to Simmer</Link>
         </div>
       </div>
     </div>
   );
 }
+

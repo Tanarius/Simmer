@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
-import { Heart, Clock, Users, ChevronRight, X, Plus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle, Instagram, Upload, FileText } from "lucide-react";
+import { Heart, Clock, Users, ChevronRight, X, Plus, Link, Loader2, ExternalLink, Sparkles, Pencil, Check, AlertTriangle, Instagram, Upload, FileText, Flame } from "lucide-react";
+import { CookMode } from "@/components/CookMode";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,7 @@ const cuisineColors: Record<string, string> = {
   "italian": "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
   "asian": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
   "american": "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  "other": "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  "other": "bg-stone-100 text-stone-700 dark:bg-stone-900/30 dark:text-stone-300",
 };
 
 function parseTags(tagsJson: string | null | undefined): string[] {
@@ -133,6 +134,7 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
   const [editInstructions, setEditInstructions] = useState("");
   const [scaledServings, setScaledServings] = useState<number | null>(null);
   const [imgError, setImgError] = useState(false);
+  const [cookMode, setCookMode] = useState(false);
 
   const updateMutation = useMutation({
     mutationFn: (data: { name: string; instructions: string }) =>
@@ -172,25 +174,10 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
     },
   });
 
-  const cleanMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/ai/clean-recipe/${recipe!.id}`);
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to clean recipe");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/recipes"] });
-      toast({ title: "Recipe Cleaned! ✨", description: "Standardized instructions and ingredients using Kitchen Copilot." });
-    },
-    onError: (err: any) => {
-      toast({ title: "Failed to clean recipe", description: err.message, variant: "destructive" });
-    }
-  });
-
   if (!recipe) return null;
+
+  // Cook Mode overlay — renders full-screen, outside the dialog
+  if (cookMode) return <CookMode recipe={recipe} onClose={() => setCookMode(false)} />;
 
   const tags = parseTags(recipe.tags);
   const baseIngredients = parseIngredients(recipe.ingredients);
@@ -220,14 +207,12 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
             {/* Action buttons — inset from right so they don't clash with the shadcn X button */}
             <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
               <Button
-                size="icon"
-                variant="secondary"
-                className={cn("h-8 w-8 bg-background/80 backdrop-blur-sm text-purple-500 hover:bg-background", cleanMutation.isPending && "opacity-50")}
-                onClick={() => cleanMutation.mutate()}
-                disabled={cleanMutation.isPending}
-                title="Clean & Structure with Kitchen Copilot"
+                size="sm"
+                className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white gap-1.5 font-semibold"
+                onClick={() => setCookMode(true)}
               >
-                {cleanMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                <Flame className="h-3.5 w-3.5" />
+                Cook
               </Button>
               {editMode ? (
                 <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm text-green-600" onClick={saveEdit} disabled={updateMutation.isPending}>
@@ -264,8 +249,9 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
               {/* Action buttons when no image */}
               {(!recipe.imageUrl || imgError) && (
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <Button size="icon" variant="outline" className={cn("text-purple-500 border-purple-200 hover:bg-purple-50 dark:border-purple-800/50 dark:hover:bg-purple-900/30", cleanMutation.isPending && "opacity-50")} onClick={() => cleanMutation.mutate()} disabled={cleanMutation.isPending} title="Clean & Structure with Kitchen Copilot">
-                    {cleanMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  <Button size="sm" className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white gap-1.5 font-semibold" onClick={() => setCookMode(true)}>
+                    <Flame className="h-3.5 w-3.5" />
+                    Cook
                   </Button>
                   {editMode ? (
                     <Button size="icon" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={saveEdit} disabled={updateMutation.isPending}>
@@ -372,7 +358,7 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
                             {ing.name}
                           </span>
                           {isDisliked && substitute && (
-                            <span className="text-violet-500 text-xs shrink-0">→ {substitute}</span>
+                            <span className="text-orange-500 text-xs shrink-0">→ {substitute}</span>
                           )}
                           {isDisliked && !substitute && (
                             <span title="Flagged in your dietary preferences">
@@ -697,7 +683,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-add-recipe">
         <DialogHeader>
           <DialogTitle>Add New Recipe</DialogTitle>
-          <DialogDescription>Add a recipe to your meal prep library.</DialogDescription>
+          <DialogDescription>Add a recipe to your Simmer library.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5 mt-2">

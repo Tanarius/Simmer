@@ -29,7 +29,7 @@ const CATEGORY_META: Record<Category, { emoji: string; label: string; bg: string
   pantry:     { emoji: "🥡",  label: "Pantry Staples",   bg: "bg-stone-100 dark:bg-stone-900/50",  border: "border-stone-300 dark:border-stone-700/40",   chipBg: "bg-stone-200 dark:bg-stone-800/50",   chipText: "text-stone-700 dark:text-stone-300" },
   dairy:      { emoji: "🧀",  label: "Dairy & Eggs",     bg: "bg-blue-50 dark:bg-blue-950/30",     border: "border-blue-200 dark:border-blue-900/40",     chipBg: "bg-blue-100 dark:bg-blue-900/30",     chipText: "text-blue-700 dark:text-blue-200" },
   produce:    { emoji: "🥦",  label: "Produce",          bg: "bg-green-50 dark:bg-green-950/30",   border: "border-green-200 dark:border-green-900/40",   chipBg: "bg-green-100 dark:bg-green-900/30",   chipText: "text-green-700 dark:text-green-200" },
-  other:      { emoji: "📦",  label: "Other",            bg: "bg-purple-50 dark:bg-purple-950/30", border: "border-purple-200 dark:border-purple-900/40", chipBg: "bg-purple-100 dark:bg-purple-900/30", chipText: "text-purple-700 dark:text-purple-200" },
+  other:      { emoji: "📦",  label: "Other",            bg: "bg-stone-50 dark:bg-stone-950/30", border: "border-stone-200 dark:border-stone-900/40", chipBg: "bg-stone-100 dark:bg-stone-900/30", chipText: "text-stone-700 dark:text-stone-200" },
 };
 
 const SUGGESTIONS: Record<Category, string[]> = {

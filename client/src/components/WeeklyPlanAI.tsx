@@ -70,7 +70,7 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setDayConfigs({}); setOpen(v); }}>
         <DialogTrigger asChild>
-          <Button className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md shadow-purple-500/20">
+          <Button className="bg-[#C96A3A] hover:bg-[#A85530] text-white shadow-md">
             <Sparkles className="w-4 h-4 mr-2" />
             Generate AI Plan
           </Button>
@@ -78,7 +78,7 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-purple-500" />
+              <Calendar className="w-5 h-5 text-orange-500" />
               Configure Week
             </DialogTitle>
             <DialogDescription>
@@ -103,7 +103,7 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
             ))}
           </div>
           <DialogFooter>
-            <Button onClick={handleGenerate} disabled={planMutation.isPending} className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white">
+            <Button onClick={handleGenerate} disabled={planMutation.isPending} className="w-full sm:w-auto bg-[#C96A3A] hover:bg-[#A85530] text-white">
               {planMutation.isPending ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
               ) : (

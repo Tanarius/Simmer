@@ -46,7 +46,7 @@ export function ShoppingListOptimizer({
     <>
       <Button 
         variant="secondary"
-        className="w-full sm:w-auto bg-purple-600/10 hover:bg-purple-600/20 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+        className="w-full sm:w-auto bg-orange-600/10 hover:bg-orange-600/20 text-orange-600 dark:text-orange-400 border border-orange-500/20"
         onClick={() => optMutation.mutate(currentItems)}
         disabled={optMutation.isPending || currentItems.length === 0}
       >

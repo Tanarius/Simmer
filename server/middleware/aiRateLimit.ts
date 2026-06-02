@@ -2,13 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
 import { User } from "@shared/schema";
 
-export const FREE_TIER_DAILY_LIMIT = 50;
+export const FREE_TIER_DAILY_LIMIT = 10;
 // applies to: /api/ai/suggest, /api/ai/weekly-plan, /api/ai/optimize-shopping-list, /api/ai/clean-recipe/:id
 
 export const TEST_TIER_DAILY_LIMIT = 200;
 // applies to: test accounts (subscriptionTier = 'test')
 
-export const COPILOT_FREE_TIER_DAILY_LIMIT = 200;
+export const COPILOT_FREE_TIER_DAILY_LIMIT = 30;
 // applies to: /api/ai/copilot/chat only
 
 export const COPILOT_TEST_TIER_DAILY_LIMIT = 200;

@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getFoodEmoji, getCuisineGradient } from "@/lib/food-emoji";
+import { DicebearAvatar } from "@/components/DicebearAvatar";
 import type { Recipe } from "@shared/schema";
 
 function compactTime(iso: string): string {
@@ -19,6 +20,7 @@ function compactTime(iso: string): string {
 
 interface ActivityGroup {
   username: string;
+  avatar: string | null;
   action: string;
   count: number;
   recipeNames: string[];
@@ -30,12 +32,12 @@ const ACTION_META: Record<string, { icon: LucideIcon; color: string; label: (n: 
   recipe_added:    { icon: ChefHat,        color: "text-emerald-500", label: (n) => `added ${n === 1 ? "a recipe" : `${n} recipes`}` },
   recipe_deleted:  { icon: Trash2,         color: "text-red-400",     label: (n) => `removed ${n === 1 ? "a recipe" : `${n} recipes`}` },
   pantry_added:    { icon: ShoppingBasket, color: "text-blue-400",    label: (n) => `added ${n === 1 ? "a pantry item" : `${n} pantry items`}` },
-  plan_meal_added: { icon: CalendarPlus,   color: "text-violet-400",  label: (n) => `added ${n === 1 ? "a meal" : `${n} meals`} to the plan` },
+  plan_meal_added: { icon: CalendarPlus,   color: "text-orange-400",  label: (n) => `added ${n === 1 ? "a meal" : `${n} meals`} to the plan` },
   plan_updated:    { icon: CalendarCheck,  color: "text-amber-400",   label: () => "updated the weekly plan" },
 };
 
 const AVATAR_GRADIENTS = [
-  "from-violet-500 to-indigo-500",
+  "from-orange-600 to-amber-700",
   "from-emerald-500 to-teal-500",
   "from-amber-500 to-orange-500",
   "from-pink-500 to-rose-500",
@@ -60,13 +62,13 @@ function RecipeHoverPreview({ recipeId, recipeName }: { recipeId: number; recipe
     const safeId = parseInt(String(recipeId), 10);
     if (!Number.isFinite(safeId) || safeId <= 0) return;
 
-    if (window.location.hash === "#/" || window.location.hash === "#" || window.location.hash === "") {
-      // Already on recipes page — dispatch custom event for immediate handling
+    if (window.location.hash.startsWith("#/recipes")) {
+      // Already on the recipes page — open dialog directly via event
       window.dispatchEvent(new CustomEvent("openRecipe", { detail: { recipeId: safeId } }));
     } else {
-      // On a different page — store and navigate; recipes page reads on mount
+      // Anywhere else (home, planner, shopping…) — store and navigate to recipes page
       sessionStorage.setItem("openRecipeId", String(safeId));
-      setLocation("/");
+      setLocation("/recipes");
     }
   }
 
@@ -152,16 +154,9 @@ export function ActivityFeed() {
                   hasNames ? "hover:bg-sidebar-accent cursor-pointer" : "cursor-default"
                 )}
               >
-                {/* Coloured gradient avatar */}
-                <div
-                  className={cn(
-                    "shrink-0 w-5 h-5 rounded-full bg-gradient-to-br flex items-center justify-center mt-0.5",
-                    avatarGradient(g.username)
-                  )}
-                >
-                  <span className="text-[8px] font-bold text-white leading-none">
-                    {g.username.slice(0, 2).toUpperCase()}
-                  </span>
+                {/* Avatar — Dicebear if set, gradient initials fallback */}
+                <div className="shrink-0 mt-0.5">
+                  <DicebearAvatar username={g.username} avatarStyle={g.avatar} size={20} />
                 </div>
 
                 {/* Action icon */}

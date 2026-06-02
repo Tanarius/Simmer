@@ -24,6 +24,7 @@ export const users = pgTable("users", {
   householdId: integer("household_id").references(() => households.id),
   stripeCustomerId: text("stripe_customer_id").unique(),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  avatar: text("avatar"), // emoji string e.g. "👨‍🍳"
 });
 
 export const recipes = pgTable("recipes", {
@@ -206,6 +207,9 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertRecipeSchema = createInsertSchema(recipes).omit({ id: true, householdId: true });
 export const insertWeeklyPlanSchema = createInsertSchema(weeklyPlans).omit({ id: true, householdId: true });
 export const insertPantryStapleSchema = createInsertSchema(pantryStaples).omit({ id: true, householdId: true });
+export const updateUserTasteProfileSchema = createInsertSchema(userTasteProfile)
+  .omit({ id: true, userId: true, derivedFrom: true, lastUpdated: true, cuisineSignals: true })
+  .partial();
 
 // Types
 export type Household = typeof households.$inferSelect;
