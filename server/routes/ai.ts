@@ -185,38 +185,31 @@ router.post("/copilot/execute-tool", copilotRateLimit, async (req, res, next) =>
 // Find real recipes via Spoonacular (no AI hallucination — real photos, real URLs)
 router.post("/copilot/find-recipes", copilotRateLimit, async (req, res, next) => {
   try {
-    const { query, cuisineChoice, mealType, maxReadyTime, vibe, protein, attempt = 0 } = req.body;
+    const { query, cuisineChoice, mealType, maxReadyTime, diet, method } = req.body;
     const userId = (req.user as any).id;
 
-    // Taste profile is NOT used to filter search results — only for AI suggestions.
-    // Users must be able to search any cuisine regardless of onboarding preferences.
+    // Build ParsedQuery from text (if present) then overlay explicit chip selections.
+    // ALL paths go through searchRecipes — cuisine is NEVER dropped in that function.
+    // Taste profile is NOT used to filter search results (only for AI suggestions).
+    const parsed = query?.trim() ? parseRecipeQuery(query) : { searchText: '', tags: [] as string[] };
 
-    let foundRecipes: SpoonacularRecipe[];
+    // Explicit chip selections always win over text-parsed values
+    if (cuisineChoice && cuisineChoice !== 'surprise') {
+      const { cuisine, excludeCuisine } = cuisineChipToQuery(cuisineChoice);
+      parsed.cuisine = cuisine;
+      if (excludeCuisine) parsed.excludeCuisine = excludeCuisine;
+    }
+    if (mealType) parsed.mealType = mealType;
+    if (maxReadyTime) parsed.maxReadyTime = Number(maxReadyTime);
+    if (diet) parsed.diet = diet;
 
-    if (query?.trim()) {
-      // Text-query path: parse the query, then overlay explicit chip selections
-      const parsed = parseRecipeQuery(query);
-      if (cuisineChoice && cuisineChoice !== 'surprise') {
-        const { cuisine, excludeCuisine } = cuisineChipToQuery(cuisineChoice);
-        parsed.cuisine = cuisine;
-        if (excludeCuisine) parsed.excludeCuisine = excludeCuisine;
-      }
-      if (mealType) parsed.mealType = mealType;
-      if (maxReadyTime) parsed.maxReadyTime = Number(maxReadyTime);
-      foundRecipes = await searchRecipes(parsed, { number: 12 });
-    } else {
-      // Wizard/chip-only path (no text query)
-      foundRecipes = await searchRecipesForCopilot({
-        vibe: vibe || 'comfort food',
-        cuisineChoice,
-        mealType,
-        protein,
-        avoidedIngredients: [],  // PART 2: taste profile removed from search
-        count: 12,
-        attempt,
-      });
+    // Cooking method chip: append keyword to searchText and neutralise time limit
+    if (method) {
+      parsed.searchText = parsed.searchText ? `${parsed.searchText} ${method}` : method;
+      if (method === 'slow cooker' || method === 'crockpot') parsed.maxReadyTime = undefined;
     }
 
+    const foundRecipes = await searchRecipes(parsed, { number: 12 });
     const usage = await storage.getUserAiUsage(userId);
     const callsRemaining = getCopilotCallsRemaining(usage.subscriptionTier, usage.copilotCallsToday);
     res.json({ recipes: foundRecipes, callsRemaining });

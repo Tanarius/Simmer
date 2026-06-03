@@ -49,14 +49,17 @@ export function parseRecipeQuery(raw: string): ParsedQuery {
   }
 
   // ── Meal type ────────────────────────────────────────────────────────────────
-  let [next, matched] = pluck(t, /\b(breakfast|brunch|morning\s+meal)\b/);
+  let [next, matched] = pluck(t, /\b(breakfasts?|brunch(es)?|morning\s+meals?)\b/);
   if (matched) { t = next; result.mealType = 'breakfast'; }
 
-  [next, matched] = pluck(t, /\b(lunch|midday\s+meal)\b/);
+  [next, matched] = pluck(t, /\b(lunche?s?|midday\s+meals?)\b/);
   if (matched) { t = next; result.mealType = 'lunch'; }
 
-  [next, matched] = pluck(t, /\b(dinner|supper|evening\s+meal)\b/);
+  [next, matched] = pluck(t, /\b(dinners?|suppers?|evening\s+meals?)\b/);
   if (matched) { t = next; result.mealType = 'dinner'; }
+
+  [next, matched] = pluck(t, /\b(breakfasts?|brunch(es)?)\b/);
+  if (matched && !result.mealType) { t = next; result.mealType = 'breakfast'; }
 
   // ── Time / difficulty ────────────────────────────────────────────────────────
   [next, matched] = pluck(t, /\b(quick|fast|weeknight|under\s+30|30[\s-]min(utes?)?|in\s+30|30\s+minute(s)?)\b/);

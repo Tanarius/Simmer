@@ -482,6 +482,9 @@ import type { ParsedQuery } from '../utils/parseRecipeQuery';
  * This is the new primary search path — takes structured ParsedQuery instead
  * of wizard params. Has its own fallback chain.
  */
+// Cuisines that map to multiple Spoonacular sub-cuisines — don't post-filter these
+const BROAD_CUISINES = new Set(['asian', 'mediterranean']);
+
 export async function searchRecipes(
   parsed: ParsedQuery,
   options: { number?: number; offset?: number; sort?: string } = {}
@@ -489,57 +492,83 @@ export async function searchRecipes(
   const apiKey = process.env.SPOONACULAR_API_KEY;
   const number = options.number ?? 12;
 
-  // TheMealDB-only fallback when no Spoonacular key
+  // TheMealDB-only path when no Spoonacular key
   if (!apiKey) {
-    const params: CopilotSearchParams = {
-      vibe: parsed.tags.includes('healthy') ? 'healthy' : 'comfort food',
+    return searchTheMealDB({
+      vibe: 'comfort food',
       cuisineChoice: parsed.cuisine ?? undefined,
       mealType: parsed.mealType ?? undefined,
       count: number,
-    };
-    return searchTheMealDB(params);
+    });
   }
 
-  const base: Record<string, any> = {
-    number,
-    offset: options.offset ?? 0,
-    addRecipeInformation: true,
-    fillIngredients: false,
-    apiKey,
-    sort: options.sort ?? (parsed.maxReadyTime ? 'time' : 'popularity'),
-  };
-
-  if (parsed.searchText) base.query = parsed.searchText;
+  // Cuisine params that NEVER get dropped — always present when cuisine is set
+  const cuisineBase: Record<string, any> = {};
   if (parsed.cuisine) {
-    base.cuisine = parsed.cuisine;
-    if (parsed.excludeCuisine) base.excludeCuisine = parsed.excludeCuisine;
+    cuisineBase.cuisine = parsed.cuisine;
+    if (parsed.excludeCuisine) cuisineBase.excludeCuisine = parsed.excludeCuisine;
   }
-  if (parsed.mealType) {
+
+  function buildBase(overrides: Record<string, any> = {}): Record<string, any> {
+    return {
+      number,
+      addRecipeInformation: true,
+      fillIngredients: false,
+      apiKey,
+      sort: options.sort ?? (parsed.maxReadyTime ? 'time' : 'popularity'),
+      ...cuisineBase,   // cuisine + excludeCuisine always present
+      ...overrides,
+    };
+  }
+
+  function applyMealType(q: Record<string, any>) {
     switch (parsed.mealType) {
-      case 'breakfast': base.type = 'breakfast'; break;
+      case 'breakfast':  q.type = 'breakfast';   break;
+      case 'side dish':  q.type = 'side dish';   break;
       case 'lunch':
-      case 'dinner':    base.type = 'main course'; break;
+      case 'dinner':     q.type = 'main course'; break;
     }
   }
-  if (parsed.maxReadyTime) base.maxReadyTime = parsed.maxReadyTime;
-  if (parsed.diet) base.diet = parsed.diet;
+
+  function logUrl(params: Record<string, any>, level: string) {
+    const p = Object.entries(params)
+      .filter(([k]) => k !== 'apiKey')
+      .map(([k, v]) => `${k}=${v}`)
+      .join('&');
+    console.log(`[searchRecipes ${level}] /recipes/complexSearch?${p}`);
+  }
+
+  // Post-process: remove results with clearly wrong cuisine
+  // Skip for broad cuisines (asian, mediterranean) which span multiple Spoonacular values
+  function filterByCuisine(results: SpoonacularRecipe[]): SpoonacularRecipe[] {
+    if (!parsed.cuisine || BROAD_CUISINES.has(parsed.cuisine)) return results;
+    return results.filter(r => {
+      if (r.cuisines.length === 0) return true; // keep if Spoonacular returned no cuisine data
+      return r.cuisines.some(c => c.toLowerCase() === parsed.cuisine!.toLowerCase());
+    });
+  }
+
+  // ── Level 1: full params ───────────────────────────────────────────────────
+  const l1: Record<string, any> = buildBase({ offset: 0 });
+  if (parsed.searchText) l1.query = parsed.searchText;
+  applyMealType(l1);
+  if (parsed.maxReadyTime) l1.maxReadyTime = parsed.maxReadyTime;
+  if (parsed.diet) l1.diet = parsed.diet;
+  logUrl(l1, 'L1');
 
   try {
-    // Attempt 1: exact params + TheMealDB in parallel for variety
+    // Run Spoonacular L1 + TheMealDB in parallel
     const [spoonRes, mealDbRes] = await Promise.allSettled([
-      complexSearch(base),
-      searchTheMealDB({
-        vibe: 'comfort food',
-        cuisineChoice: parsed.cuisine,
-        mealType: parsed.mealType,
-        count: Math.ceil(number / 2),
-      }),
+      complexSearch(l1),
+      parsed.cuisine
+        ? searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, mealType: parsed.mealType, count: Math.ceil(number / 2) })
+        : Promise.resolve([] as SpoonacularRecipe[]),
     ]);
-    const spoon  = spoonRes.status  === 'fulfilled' ? spoonRes.value  : [];
+    const spoon  = filterByCuisine(spoonRes.status  === 'fulfilled' ? spoonRes.value  : []);
     const mealDb = mealDbRes.status === 'fulfilled' ? mealDbRes.value : [];
 
     if (spoon.length >= 3) {
-      // Interleave TheMealDB results for variety
+      // Interleave only TheMealDB results that match cuisine
       if (mealDb.length > 0) {
         const combined: SpoonacularRecipe[] = [];
         const max = Math.max(spoon.length, mealDb.length);
@@ -551,54 +580,54 @@ export async function searchRecipes(
       }
       return spoon;
     }
-
     if (mealDb.length >= 3) return mealDb.slice(0, number);
 
-    // Attempt 2: relax time, keep cuisine + meal type
-    if (parsed.maxReadyTime) {
-      const relaxed = { ...base };
-      delete relaxed.maxReadyTime;
-      relaxed.sort = 'popularity';
-      relaxed.offset = Math.floor(Math.random() * 20);
-      const r2 = await complexSearch(relaxed);
+    // ── Level 2: drop searchText, keep everything else ─────────────────────
+    if (parsed.searchText) {
+      const l2 = buildBase({ offset: Math.floor(Math.random() * 20), sort: 'popularity' });
+      applyMealType(l2);
+      if (parsed.maxReadyTime) l2.maxReadyTime = parsed.maxReadyTime;
+      if (parsed.diet) l2.diet = parsed.diet;
+      // no query= here — searchText dropped
+      logUrl(l2, 'L2');
+      const r2 = filterByCuisine(await complexSearch(l2));
       if (r2.length >= 3) return r2;
     }
 
-    // Attempt 3: drop meal type, keep cuisine + time
-    if (parsed.mealType) {
-      const noType = { ...base };
-      delete noType.type;
-      delete noType.maxReadyTime;
-      noType.sort = 'popularity';
-      noType.offset = Math.floor(Math.random() * 20);
-      const r3 = await complexSearch(noType);
+    // ── Level 3: drop maxReadyTime, keep cuisine + mealType + diet ─────────
+    if (parsed.maxReadyTime) {
+      const l3 = buildBase({ offset: Math.floor(Math.random() * 20), sort: 'popularity' });
+      applyMealType(l3);
+      if (parsed.diet) l3.diet = parsed.diet;
+      logUrl(l3, 'L3');
+      const r3 = filterByCuisine(await complexSearch(l3));
       if (r3.length >= 3) return r3;
     }
 
-    // Attempt 4: cuisine only — broadest possible with cuisine maintained
-    if (parsed.cuisine) {
-      const cuisineOnly: Record<string, any> = {
-        number, addRecipeInformation: true, fillIngredients: false,
-        apiKey, sort: 'popularity',
-        cuisine: base.cuisine,
-        ...(base.excludeCuisine ? { excludeCuisine: base.excludeCuisine } : {}),
-      };
-      const r4 = await complexSearch(cuisineOnly);
+    // ── Level 4: drop mealType (and diet), keep cuisine + excludeCuisine only
+    {
+      const l4 = buildBase({ offset: Math.floor(Math.random() * 30), sort: 'popularity' });
+      logUrl(l4, 'L4');
+      const r4 = filterByCuisine(await complexSearch(l4));
       if (r4.length > 0) return r4;
     }
 
-    // Final: TheMealDB only
+    // ── Cuisine-filtered TheMealDB as last resort (matches cuisine) ─────────
     if (mealDb.length > 0) return mealDb;
-    return searchTheMealDB({ vibe: 'comfort food', count: number });
+    if (parsed.cuisine) {
+      const fallbackDb = await searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, count: number });
+      if (fallbackDb.length > 0) return fallbackDb;
+    }
+
+    // Return whatever we have — never supplement with off-cuisine results
+    return [...spoon, ...mealDb].slice(0, number);
 
   } catch (err: any) {
-    console.error('searchRecipes failed:', err?.message);
-    return searchTheMealDB({
-      vibe: 'comfort food',
-      cuisineChoice: parsed.cuisine,
-      mealType: parsed.mealType,
-      count: number,
-    });
+    console.error('[searchRecipes] Error:', err?.message);
+    if (parsed.cuisine) {
+      return searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, mealType: parsed.mealType, count: number });
+    }
+    return [];
   }
 }
 
