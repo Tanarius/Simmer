@@ -477,12 +477,27 @@ export async function searchRecipesForCopilot(params: CopilotSearchParams): Prom
 
 import type { ParsedQuery } from '../utils/parseRecipeQuery';
 
-/**
- * Search recipes using a fully-parsed query.
- * This is the new primary search path — takes structured ParsedQuery instead
- * of wizard params. Has its own fallback chain.
- */
-// Cuisines that map to multiple Spoonacular sub-cuisines — don't post-filter these
+// Explicit exclusion lists per requested cuisine.
+// Applied as Spoonacular excludeCuisine= so the API never returns off-cuisine results
+// even when its own cuisine= filter is imprecise.
+const CUISINE_EXCLUSIONS: Record<string, string> = {
+  american:      'italian,french,indian,mexican,chinese,japanese,korean,thai,greek,mediterranean,middle eastern,vietnamese,spanish,german,nordic,eastern european,latin american,canadian',
+  italian:       'american,indian,mexican,chinese,japanese,korean,thai,greek,middle eastern,vietnamese,spanish,french,german,nordic',
+  'tex-mex':     'american,italian,indian,chinese,japanese,korean,thai,greek,mediterranean,middle eastern,vietnamese,french',
+  mexican:       'american,italian,indian,chinese,japanese,korean,thai,greek,mediterranean,middle eastern,vietnamese,french',
+  asian:         'american,italian,mexican,greek,mediterranean,middle eastern,french,spanish,german,nordic',
+  mediterranean: 'american,indian,mexican,chinese,japanese,korean,thai,vietnamese,french',
+  indian:        'american,italian,mexican,chinese,japanese,korean,thai,greek,mediterranean,french,vietnamese,spanish',
+  japanese:      'american,italian,mexican,indian,greek,mediterranean,middle eastern,french,spanish,german',
+  korean:        'american,italian,mexican,indian,greek,mediterranean,middle eastern,french,spanish,japanese',
+  french:        'american,indian,mexican,chinese,japanese,korean,thai,middle eastern,vietnamese,german,nordic',
+  chinese:       'american,italian,mexican,indian,greek,mediterranean,middle eastern,french,spanish,korean',
+  thai:          'american,italian,mexican,indian,greek,mediterranean,middle eastern,french,spanish,korean,chinese,japanese',
+  vietnamese:    'american,italian,mexican,indian,greek,mediterranean,middle eastern,french,spanish,korean,thai',
+};
+
+// Cuisines that return Spoonacular results tagged with sub-cuisines (e.g. asian → Chinese/Japanese).
+// Skip exact-match post-filter for these; they're correct by construction.
 const BROAD_CUISINES = new Set(['asian', 'mediterranean']);
 
 export async function searchRecipes(
@@ -502,11 +517,16 @@ export async function searchRecipes(
     });
   }
 
-  // Cuisine params that NEVER get dropped — always present when cuisine is set
+  // Cuisine params that NEVER get dropped — always present when cuisine is set.
+  // Use the comprehensive CUISINE_EXCLUSIONS list (covers all major off-cuisines)
+  // rather than the single "exclude: canadian" from parseRecipeQuery.
   const cuisineBase: Record<string, any> = {};
   if (parsed.cuisine) {
     cuisineBase.cuisine = parsed.cuisine;
-    if (parsed.excludeCuisine) cuisineBase.excludeCuisine = parsed.excludeCuisine;
+    cuisineBase.excludeCuisine =
+      CUISINE_EXCLUSIONS[parsed.cuisine] ??
+      parsed.excludeCuisine ??
+      undefined;
   }
 
   function buildBase(overrides: Record<string, any> = {}): Record<string, any> {
@@ -538,14 +558,19 @@ export async function searchRecipes(
     console.log(`[searchRecipes ${level}] /recipes/complexSearch?${p}`);
   }
 
-  // Post-process: remove results with clearly wrong cuisine
-  // Skip for broad cuisines (asian, mediterranean) which span multiple Spoonacular values
+  // Post-process: hard filter to remove results that don't match requested cuisine.
+  // Rules:
+  //   - No cuisine filter active → pass everything through
+  //   - Broad cuisines (asian, mediterranean) → pass everything through (sub-cuisines vary)
+  //   - Specific cuisine requested:
+  //       * cuisines[] is empty → DROP (unclassified ≠ American/Italian/etc.)
+  //       * cuisines[] present → KEEP only if it includes the requested cuisine (case-insensitive)
   function filterByCuisine(results: SpoonacularRecipe[]): SpoonacularRecipe[] {
     if (!parsed.cuisine || BROAD_CUISINES.has(parsed.cuisine)) return results;
-    return results.filter(r => {
-      if (r.cuisines.length === 0) return true; // keep if Spoonacular returned no cuisine data
-      return r.cuisines.some(c => c.toLowerCase() === parsed.cuisine!.toLowerCase());
-    });
+    return results.filter(r =>
+      r.cuisines.length > 0 &&
+      r.cuisines.some(c => c.toLowerCase() === parsed.cuisine!.toLowerCase())
+    );
   }
 
   // ── Level 1: full params ───────────────────────────────────────────────────
