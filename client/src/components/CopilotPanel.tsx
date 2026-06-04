@@ -283,6 +283,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queryRef = useRef("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -302,7 +303,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
     mutationFn: () => {
       const methodChip = METHOD_CHIPS.find(m => m.value === methodFilter);
       return apiRequest("POST", "/api/ai/copilot/find-recipes", {
-        query: query.trim() || undefined,
+        query: queryRef.current.trim() || undefined,
         cuisineChoice: cuisineFilter ?? undefined,
         mealType: mealTypeFilter ?? undefined,
         maxReadyTime: timeFilter ?? undefined,
@@ -327,9 +328,9 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
   });
 
   const triggerSearch = useCallback(() => {
-    const hasAny = query.trim() || cuisineFilter || mealTypeFilter || timeFilter || dietFilter || methodFilter;
+    const hasAny = queryRef.current.trim() || cuisineFilter || mealTypeFilter || timeFilter !== null || dietFilter || methodFilter;
     if (hasAny) searchMutation.mutate();
-  }, [query, cuisineFilter, mealTypeFilter, timeFilter, dietFilter, methodFilter]); // eslint-disable-line
+  }, [cuisineFilter, mealTypeFilter, timeFilter, dietFilter, methodFilter]); // eslint-disable-line
 
   // Auto-search when any chip changes (immediate)
   useEffect(() => {
@@ -343,6 +344,26 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
     if (!query.trim()) return;
     debounceRef.current = setTimeout(() => triggerSearch(), 600);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query]); // eslint-disable-line
+
+  // Parse cuisine keyword from typed text and highlight the matching chip
+  useEffect(() => {
+    if (!query.trim()) return;
+    const lower = query.toLowerCase();
+    const CUISINE_KEYWORDS: Array<{ keyword: string; value: string }> = [
+      { keyword: "american", value: "american" },
+      { keyword: "italian", value: "italian" },
+      { keyword: "mexican", value: "tex-mex" },
+      { keyword: "tex-mex", value: "tex-mex" },
+      { keyword: "asian", value: "asian" },
+      { keyword: "mediterranean", value: "mediterranean" },
+      { keyword: "indian", value: "indian" },
+      { keyword: "japanese", value: "japanese" },
+      { keyword: "korean", value: "korean" },
+      { keyword: "french", value: "french" },
+    ];
+    const match = CUISINE_KEYWORDS.find(({ keyword }) => lower.includes(keyword));
+    if (match) setCuisineFilter(match.value);
   }, [query]); // eslint-disable-line
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -373,6 +394,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
   }
 
   function reset() {
+    queryRef.current = "";
     setQuery(""); setCuisineFilter(null); setMealTypeFilter(null);
     setTimeFilter(null); setDietFilter(null); setMethodFilter(null);
     setRecipes([]); setSavedIds(new Set()); setHasSearched(false);
@@ -434,7 +456,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
               ref={searchInputRef}
               type="text"
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={e => { queryRef.current = e.target.value; setQuery(e.target.value); }}
               onKeyDown={handleKeyDown}
               placeholder="Try: 'quick american dinners' or 'easy italian pasta'"
               className="w-full h-9 pl-9 pr-4 rounded-lg border border-border bg-muted text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-[#C96A3A]/50 focus:border-[#C96A3A]/50 transition-colors"
@@ -531,7 +553,7 @@ export function CopilotPanel({ open: controlledOpen, onOpenChange }: CopilotPane
                 {["quick american dinners", "easy italian pasta", "vegetarian healthy lunch", "air fryer chicken"].map(ex => (
                   <button
                     key={ex}
-                    onClick={() => { setQuery(ex); setTimeout(() => { if (debounceRef.current) clearTimeout(debounceRef.current); triggerSearch(); }, 50); }}
+                    onClick={() => { queryRef.current = ex; setQuery(ex); if (debounceRef.current) clearTimeout(debounceRef.current); triggerSearch(); }}
                     className="px-2.5 py-1 rounded-full border border-border bg-muted hover:border-[#C96A3A]/50 text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {ex}

@@ -4,14 +4,73 @@ This file is loaded automatically at the start of every session. Keep it current
 
 ---
 
+## Current State — June 2026
+
+### Brand
+- App name: **Simmer** — tagline: "Good things simmer."
+- Primary: `#C96A3A` (terracotta), Secondary: `#3D5A47` (forest green)
+- Dark bg: `#1C1410`, Surface: `#2A1F18`
+- Logo: "S" placeholder in sidebar — awaiting SVG from Midjourney
+- Favicon: `client/public/favicon.ico` — needs real logo
+
+### Deployment
+- Platform: Railway — URL: `https://mealprep-production-61e1.up.railway.app`
+- All env vars confirmed set in Railway dashboard
+- Auto-deploys on `git push` to `main`
+
+### Test Account
+- Username: `simmer_test` / Password: `SimmTest2026!` / HouseholdId: 6
+- Has 12 seeded recipes, full weekly plan, 62 shopping items
+
+### Feature Status
+| Feature | Status |
+|---|---|
+| Auth (login, register, password reset) | Complete |
+| Recipe CRUD + URL import + social import | Complete |
+| Weekly planner (drag-and-drop, slot swap) | Complete |
+| Shopping list + Copilot input bar | Complete |
+| Pantry staples | Complete |
+| Find Recipes (free text + 5 filter chip rows) | Complete — 3 active bugs (see below) |
+| Kitchen Copilot | Complete with tool use |
+| Chef Mode (AI suggest from pantry) | Complete |
+| Household sharing | Complete |
+| Stripe billing | Wired, test mode (not yet live keys) |
+| Onboarding | Complete |
+
+### Active Bugs — Find Recipes (`client/src/components/CopilotPanel.tsx`)
+1. **Suggested query chip** populates text input but doesn't fire search — must trigger search immediately on click.
+2. **Text-parsed cuisine** doesn't highlight the correct cuisine chip — typing "american" should activate the American chip visually.
+3. **Search button** may not read the current input value correctly when fired after a chip click.
+
+Fix all three before any other work.
+
+### Pre-Launch Checklist
+1. Fix Find Recipes bugs above
+2. Logo SVG → real favicon (waiting on Midjourney)
+3. Landing page
+4. Sentry error monitoring
+5. Smoke test full new-user flow
+
+### Audit Status
+All critical and important pre-launch audit items resolved. 394/394 tests passing. TSC clean.
+
+### Claude + Claude Code Workflow
+- Claude (claude.ai): strategy, prompts, browser testing, product decisions, audit review
+- Claude Code: implementation, file changes, tests
+- User pastes prompts from Claude into Claude Code; update CLAUDE.md after every major session.
+
+---
+
 ## Stack
 
 - **Frontend**: React + Vite, TailwindCSS, shadcn/ui, TanStack Query, Wouter routing (hash-based: `/#/`, `/#/recipes`, etc.)
-- **Backend**: Express + TypeScript (tsx), Passport.js (local strategy), express-session (MemoryStore)
+- **Backend**: Express 5 + TypeScript (tsx), Passport.js (local strategy), connect-pg-simple sessions (PostgreSQL-backed)
 - **Database**: PostgreSQL via Neon — Drizzle ORM, schema in `shared/schema.ts`
 - **AI**: Anthropic Claude (`server/services/anthropic.ts`), Kitchen Copilot (`server/services/copilot.ts`)
 - **Recipe APIs**: Spoonacular (`server/services/spoonacular.ts`) + Edamam (`server/services/edamam.ts`) + TheMealDB (always-on parallel source)
-- **Deployment**: Railway (previously Render)
+- **Billing**: Stripe (test mode) — not yet live keys
+- **Email**: Resend — password reset tokens
+- **Deployment**: Railway — `https://mealprep-production-61e1.up.railway.app`
 
 ---
 
@@ -170,7 +229,7 @@ window.dispatchEvent(new CustomEvent("openRecipe", { detail: { recipeId: id } })
 
 ---
 
-## Known Issues / Tech Debt (as of 2026-04-25)
+## Known Issues / Tech Debt (as of 2026-06-03)
 
 ### Security (open, non-blocking)
 - SEC-010: No CSRF tokens — deferred post-launch. SameSite=Lax on session cookie partially mitigates.
