@@ -1,13 +1,12 @@
 import "dotenv/config";
 import * as Sentry from "@sentry/node";
 
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV ?? "development",
-    tracesSampleRate: 0.1,
-  });
-}
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || "development",
+  enabled: !!process.env.SENTRY_DSN,
+  tracesSampleRate: 0.2,
+});
 
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";

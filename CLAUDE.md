@@ -45,10 +45,10 @@ This file is loaded automatically at the start of every session. Keep it current
 Fix all three before any other work.
 
 ### Pre-Launch Checklist
-1. Fix Find Recipes bugs above
+1. ~~Fix Find Recipes bugs~~ — done
 2. Logo SVG → real favicon (waiting on Midjourney)
-3. Landing page
-4. Sentry error monitoring
+3. ~~Landing page~~ — done (`client/src/pages/landing.tsx`)
+4. ~~Sentry error monitoring~~ — done (server + client wired, needs DSN env vars in Railway)
 5. Smoke test full new-user flow
 
 ### Audit Status
