@@ -1,8 +1,8 @@
 ﻿{
   "name": "Simmer",
   "short_name": "Simmer",
-  "description": "Meal planning for real households. Good things simmer.",
-  "start_url": "/#/",
+  "description": "Good things simmer.",
+  "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "theme_color": "#C96A3A",

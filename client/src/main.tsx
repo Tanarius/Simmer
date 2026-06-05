@@ -23,6 +23,15 @@ if (!window.location.hash) {
   window.location.hash = "#/";
 }
 
+// Register service worker for offline support
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // SW registration failed — app still works, just no offline cache
+    });
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <Sentry.ErrorBoundary fallback={<p>Something went wrong</p>}>
     <App />

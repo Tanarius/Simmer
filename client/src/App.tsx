@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useTheme } from "@/hooks/use-theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { UpgradeBanner } from "@/components/UpgradeBanner";
+import InstallPrompt from "@/components/InstallPrompt";
 import NotFound from "@/pages/not-found";
 import RecipesPage from "@/pages/recipes";
 import PlannerPage from "@/pages/planner";
@@ -158,6 +159,7 @@ function App() {
       <TooltipProvider>
         <AppLayout />
         <Toaster />
+        <InstallPrompt />
       </TooltipProvider>
     </QueryClientProvider>
   );
