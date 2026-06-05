@@ -1,13 +1,3 @@
-import * as Sentry from "@sentry/react";
-
-if (import.meta.env.VITE_SENTRY_DSN) {
-  Sentry.init({
-    dsn: import.meta.env.VITE_SENTRY_DSN,
-    environment: import.meta.env.MODE,
-    tracesSampleRate: 0.1,
-  });
-}
-
 import React from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
@@ -116,8 +106,15 @@ function BoundedRouter() {
   );
 }
 
-function AppLayout() {
-  useTheme();
+// Renders sidebar shell for authenticated users only.
+// Unauthenticated users (landing page, auth) render with no sidebar.
+function AppShell() {
+  const { data: user } = useQuery<any>({ queryKey: ["/api/user"], retry: false, staleTime: 30_000 });
+  const isAuthed = !!user && user.status !== 401 && Object.keys(user).length > 0;
+
+  if (!isAuthed) {
+    return <BoundedRouter />;
+  }
 
   const sidebarStyle = {
     "--sidebar-width": "15rem",
@@ -125,25 +122,32 @@ function AppLayout() {
   };
 
   return (
-    <Router hook={useHashLocation}>
-      <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-        <div className="flex h-screen w-full overflow-hidden">
-          <AppSidebar />
-          <div className="flex flex-col flex-1 min-w-0">
-            <header className="flex flex-col shrink-0">
-              <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border bg-background h-12">
-                <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
-                <ThemeToggle />
-              </div>
-              <NoEmailBanner />
-              <UpgradeBanner />
-            </header>
-            <main className="flex-1 overflow-auto">
-              <BoundedRouter />
-            </main>
-          </div>
+    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+      <div className="flex h-screen w-full overflow-hidden">
+        <AppSidebar />
+        <div className="flex flex-col flex-1 min-w-0">
+          <header className="flex flex-col shrink-0">
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border bg-background h-12">
+              <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
+              <ThemeToggle />
+            </div>
+            <NoEmailBanner />
+            <UpgradeBanner />
+          </header>
+          <main className="flex-1 overflow-auto">
+            <BoundedRouter />
+          </main>
         </div>
-      </SidebarProvider>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function AppLayout() {
+  useTheme();
+  return (
+    <Router hook={useHashLocation}>
+      <AppShell />
     </Router>
   );
 }
