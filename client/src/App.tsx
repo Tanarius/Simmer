@@ -97,12 +97,15 @@ function NoEmailBanner() {
   );
 }
 
-// Resets ErrorBoundary on every route change by using location as the key
+// Resets ErrorBoundary on every route change by using location as the key.
+// The inner div uses the same key to trigger the fade-in CSS animation on every navigation.
 function BoundedRouter() {
   const [location] = useLocation();
   return (
     <ErrorBoundary key={location}>
-      <AppRouter />
+      <div key={location} style={{ animation: "simmer-fade-in 150ms ease forwards" }}>
+        <AppRouter />
+      </div>
     </ErrorBoundary>
   );
 }

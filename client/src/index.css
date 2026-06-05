@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes simmer-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* LIGHT MODE — Warm kitchen palette: amber accent, creamy surfaces */
 :root {
   --button-outline: rgba(0,0,0, .10);

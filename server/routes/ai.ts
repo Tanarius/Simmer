@@ -514,7 +514,8 @@ Rules:
 - instructions must be an array of plain strings (no numbering)
 - tags: only values from: crockpot, slow-cook, grilled, quick, make-ahead, freezer-friendly, one-pot, one-pan, air-fryer
 - If prep/cook times are not mentioned, use 0
-- If the image is a screenshot with partial text, extract whatever is visible`;
+- If the image is a screenshot with partial text, extract whatever is visible
+- Cuisine detection: infer from dish name and ingredients. pasta/risotto/pizza → italian; tortillas/salsa/chipotle/jalapeño → tex-mex; soy sauce/ginger/bok choy/noodles/rice/miso/kimchi/curry → asian; tikka/masala/naan/ghee/turmeric → indian; olive oil/feta/hummus/pita/tahini → mediterranean; burger/bbq/mac and cheese/biscuits → american; when uncertain → other`;
 
 router.post("/import-from-social", aiRateLimit, async (req, res, next) => {
   try {
@@ -527,9 +528,9 @@ router.post("/import-from-social", aiRateLimit, async (req, res, next) => {
       return res.status(400).json({ error: "mode must be 'text' or 'image'" });
     }
 
-    // Image size guard: base64 of 4MB binary = ~5.5MB string
-    if (mode === "image" && content.length > 6_000_000) {
-      return res.status(400).json({ error: "Image too large. Please use a screenshot under 4 MB." });
+    // Image size guard: base64 of 10MB binary ≈ 13.7MB string
+    if (mode === "image" && content.length > 14_000_000) {
+      return res.status(400).json({ error: "Image too large. Please use a screenshot under 10 MB." });
     }
 
     if (!process.env.ANTHROPIC_API_KEY) {

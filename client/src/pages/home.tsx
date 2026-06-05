@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
   ChefHat, ShoppingCart, Calendar, Sparkles,
@@ -245,6 +246,7 @@ function ActivityPanel({ activity }: { activity: ActivityEntry[] }) {
 
 export default function HomePage() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const weekStart = getMondayOfWeek(new Date());
 
   const { data: user } = useQuery<any>({ queryKey: ["/api/user"] });
@@ -274,6 +276,20 @@ export default function HomePage() {
   const greeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening";
   const dateStr = (() => { try { return format(new Date(), "EEEE, MMMM d"); } catch { return ""; } })();
 
+  // Milestone toasts on recipe count changes
+  const prevRecipeCount = useRef<number | null>(null);
+  useEffect(() => {
+    const count = recipes?.length ?? null;
+    if (count === null) return;
+    if (prevRecipeCount.current === null) { prevRecipeCount.current = count; return; }
+    if (count > prevRecipeCount.current) {
+      if (count === 1) toast({ description: "🎉 First recipe saved! Now plan your week." });
+      else if (count === 5) toast({ description: "Nice collection! Try Generate AI Plan to fill your week." });
+      else if (count === 10) toast({ description: "Your library is growing! Time to let Chef Mode cook." });
+    }
+    prevRecipeCount.current = count;
+  }, [recipes?.length]); // eslint-disable-line
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex-1 overflow-auto">
@@ -287,10 +303,43 @@ export default function HomePage() {
               {/* Greeting */}
               <div>
                 <h1 className="text-2xl font-bold">
-                  {greeting}{user?.username ? `, ${user.username}` : ""}
+                  {greeting}{user?.displayName ? `, ${user.displayName}` : ""}
                 </h1>
-                <p className="text-sm text-muted-foreground mt-0.5">{dateStr}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-sm text-muted-foreground">{dateStr}</p>
+                  {!user?.displayName && (
+                    <button onClick={() => setLocation("/profile")} className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2">
+                      Set your name →
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* New user empty state */}
+              {recipes?.length === 0 && (
+                <div className="rounded-2xl border border-border bg-card p-5">
+                  <h2 className="text-base font-bold mb-1">Welcome to Simmer! 👋</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Let's get your kitchen set up.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {([
+                      { icon: "🔍", title: "Find your first recipe", desc: "Search millions of recipes by cuisine, diet, or ingredient.", href: "/recipes" },
+                      { icon: "📱", title: "Import from Instagram", desc: "Paste a caption or screenshot — AI extracts the recipe.", href: "/recipes" },
+                      { icon: "✏️", title: "Add a recipe manually", desc: "Build your own recipe from scratch.", href: "/recipes" },
+                    ] as const).map(({ icon, title, desc, href }) => (
+                      <button
+                        key={title}
+                        onClick={() => setLocation(href)}
+                        className="text-left rounded-xl border border-border bg-background p-4 hover:bg-accent/40 transition-colors"
+                        style={{ borderLeftWidth: 3, borderLeftColor: "#C96A3A" }}
+                      >
+                        <div className="text-2xl mb-2">{icon}</div>
+                        <h3 className="text-sm font-semibold mb-1">{title}</h3>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Quick stats */}
               <div className="flex gap-3">

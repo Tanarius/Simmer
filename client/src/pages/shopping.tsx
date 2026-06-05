@@ -115,7 +115,7 @@ function ItemRow({
   const qty = [item.amount, item.unit].filter(Boolean).join(" ");
 
   return (
-    <div className={cn("group", item.checked && "opacity-60")}>
+    <div className={cn("group transition-opacity duration-300", item.checked && "opacity-50")}>
       <div className="flex items-center gap-2.5 px-3 py-2">
         {/* Product thumbnail */}
         <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
@@ -131,8 +131,8 @@ function ItemRow({
         <button
           onClick={() => onToggle(item.id, !item.checked)}
           className={cn(
-            "w-4.5 h-4.5 min-w-[18px] min-h-[18px] rounded border-2 flex items-center justify-center transition-colors",
-            item.checked ? "bg-primary border-primary" : "border-border hover:border-primary"
+            "w-4.5 h-4.5 min-w-[18px] min-h-[18px] rounded border-2 flex items-center justify-center transition-all duration-200",
+            item.checked ? "bg-primary border-primary scale-110" : "border-border hover:border-primary"
           )}
         >
           {item.checked && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
@@ -140,7 +140,7 @@ function ItemRow({
 
         {/* Name + qty */}
         <div className="flex-1 min-w-0 leading-tight">
-          <span className={cn("text-sm", item.checked && "line-through text-muted-foreground")}>
+          <span className={cn("text-sm transition-all duration-300", item.checked && "line-through text-muted-foreground")}>
             {item.name}
           </span>
           {qty && <span className="text-xs text-muted-foreground ml-1.5">{qty}</span>}

@@ -598,7 +598,7 @@ export async function registerRoutes(server: Server, app: Express) {
       const res = await fetch(url, {
         headers,
         redirect: "follow",
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(15000),
       });
       if (res.ok) {
         const html = await res.text();
@@ -752,10 +752,13 @@ export async function registerRoutes(server: Server, app: Express) {
         // Site blocked direct fetch — fall through to Spoonacular
       }
 
+      if (recipeData) console.log(`[import-url] strategy=json-ld/html url=${url}`);
+
       // ── Strategy 2: Spoonacular extract API ────────────────────────────────
       // Handles Cloudflare-protected sites (AllRecipes, Food Network, Tasty,
       // Serious Eats…) and any other site our server can't reach directly.
       if (!recipeData) {
+        console.log(`[import-url] strategy=spoonacular url=${url}`);
         const sp = await extractRecipeByUrl(url);
         if (sp) {
           // Map Spoonacular response directly to our response format and return

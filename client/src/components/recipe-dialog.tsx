@@ -489,6 +489,10 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
   const [socialText, setSocialText] = useState("");
   const [isSocialImporting, setIsSocialImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSlow, setImportSlow] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<{ cuisine?: string; mealType?: string }>({});
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [cuisine, setCuisine] = useState<string>("");
@@ -524,22 +528,54 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
     setTags([]); setIngredients([{ name: "", amount: 1, unit: "", category: "produce" }]);
     setInstructions([""]); setImportUrl(""); setImageUrl(null); setSourceUrl(null);
     setImportTab("url"); setSocialMode("text"); setSocialText("");
+    setImportError(null); setImportSlow(false); setImagePreview(null); setFormErrors({});
+  }
+
+  function isValidRecipeUrl(url: string): boolean {
+    try {
+      const u = new URL(url);
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch { return false; }
+  }
+
+  function classifyImportError(msg: string): string {
+    const m = msg.toLowerCase();
+    if (m.includes("403") || m.includes("blocked") || m.includes("forbidden") || m.includes("cloudflare") || m.includes("does not allow")) {
+      return "This site doesn't allow automatic import. Try copying the recipe text and using the Instagram/Social tab instead, or add it manually.";
+    }
+    if (m.includes("timeout") || m.includes("timed out") || m.includes("408") || m.includes("slow") || m.includes("could not reach")) {
+      return "We couldn't reach that page. Check the link works in your browser, then try again.";
+    }
+    if (m.includes("no recipe") || m.includes("javascript rendering") || m.includes("not found on this page")) {
+      return "No recipe found on that page. Try the Instagram/Social tab to paste the recipe text instead.";
+    }
+    if (m.includes("invalid") || m.includes("url is required")) {
+      return "That doesn't look like a valid recipe URL. Try a link from AllRecipes, Food Network, Tasty, or similar recipe sites.";
+    }
+    return "Couldn't import from that URL. You can paste the recipe text using the Instagram/Social tab.";
   }
 
   async function handleImportUrl() {
-    if (!importUrl.trim()) return;
+    const url = importUrl.trim();
+    if (!url) return;
+    if (!isValidRecipeUrl(url)) {
+      setImportError("That doesn't look like a valid recipe URL. Try a link from AllRecipes, Food Network, Tasty, or similar recipe sites.");
+      return;
+    }
+    setImportError(null);
+    setImportSlow(false);
     setIsImporting(true);
+    const slowTimer = setTimeout(() => setImportSlow(true), 10_000);
     try {
-      const res = await apiRequest("POST", "/api/recipes/import-url", { url: importUrl.trim() });
+      const res = await apiRequest("POST", "/api/recipes/import-url", { url });
       const data = await res.json();
-      if (data.error) {
-        toast({ title: "Import failed", description: data.error, variant: "destructive" });
-        return;
-      }
-      populateFromImport(data, importUrl.trim());
+      if (data.error) { setImportError(classifyImportError(data.error)); return; }
+      populateFromImport(data, url);
     } catch (err: any) {
-      toast({ title: "Import failed", description: err.message || "Could not reach the URL", variant: "destructive" });
+      setImportError(classifyImportError(err.message || ""));
     } finally {
+      clearTimeout(slowTimer);
+      setImportSlow(false);
       setIsImporting(false);
     }
   }
@@ -592,31 +628,37 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
   }
 
   async function handleSocialImportImage(file: File) {
-    if (file.size > 4 * 1024 * 1024) {
-      toast({ title: "Image too large", description: "Please use a screenshot under 4 MB.", variant: "destructive" });
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "Image too large", description: "Please use a screenshot under 10 MB.", variant: "destructive" });
       return;
     }
+    const preview = URL.createObjectURL(file);
+    setImagePreview(preview);
     setIsSocialImporting(true);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onload = () => resolve(reader.result as string);
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+      const base64 = dataUrl.split(",")[1];
       const res = await apiRequest("POST", "/api/ai/import-from-social", {
-        mode: "image",
-        content: base64,
-        mimeType: file.type,
+        mode: "image", content: base64, mimeType: file.type || "image/jpeg",
       });
       const data = await res.json();
       if (data.error) {
-        toast({ title: "Import failed", description: data.error, variant: "destructive" });
+        const msg = data.error === "No recipe found"
+          ? "We couldn't find a recipe in that image. Try a clearer photo or paste the text instead."
+          : data.error;
+        toast({ title: "Import failed", description: msg, variant: "destructive" });
+        setImagePreview(null);
         return;
       }
       populateFromImport(data);
     } catch (err: any) {
       toast({ title: "Import failed", description: err.message || "Could not read the image", variant: "destructive" });
+      setImagePreview(null);
     } finally {
       setIsSocialImporting(false);
     }
@@ -652,10 +694,15 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !cuisine || !mealType) {
-      toast({ title: "Please fill in name, cuisine, and meal type", variant: "destructive" });
+    const errs: { cuisine?: string; mealType?: string } = {};
+    if (!cuisine) errs.cuisine = "Please select a cuisine type";
+    if (!mealType) errs.mealType = "Please select a meal type";
+    if (!name || Object.keys(errs).length > 0) {
+      setFormErrors(errs);
+      if (!name) toast({ title: "Please enter a recipe name", variant: "destructive" });
       return;
     }
+    setFormErrors({});
 
     const filteredIngredients = ingredients.filter((i) => i.name.trim());
     const filteredInstructions = instructions.filter((s) => s.trim());
@@ -724,10 +771,10 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                   <Input
                     placeholder="Paste a recipe URL (AllRecipes, Food Network, Tasty, etc.)"
                     value={importUrl}
-                    onChange={(e) => setImportUrl(e.target.value)}
+                    onChange={(e) => { setImportUrl(e.target.value); setImportError(null); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleImportUrl(); } }}
                     data-testid="input-import-url"
-                    className="flex-1"
+                    className={cn("flex-1", importError && "border-destructive")}
                   />
                   <Button
                     type="button"
@@ -743,9 +790,20 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                     )}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Works with most major recipe sites. The form below will auto-fill — review and save.
-                </p>
+                {importSlow && (
+                  <p className="text-xs text-amber-500 flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin shrink-0" /> This is taking longer than usual...
+                  </p>
+                )}
+                {importError ? (
+                  <p className="text-xs text-destructive flex items-start gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />{importError}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Works with most major recipe sites. The form below will auto-fill — review and save.
+                  </p>
+                )}
               </div>
             )}
 
@@ -782,12 +840,17 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
 
                 {socialMode === "text" ? (
                   <div className="space-y-2">
+                    <div className="rounded-md bg-muted/60 border-l-2 border-orange-400/60 px-3 py-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Example</p>
+                      <p className="text-xs text-muted-foreground italic leading-relaxed">"My famous chicken tikka! You'll need: 1 lb chicken, 1 cup yogurt, 2 tbsp tikka masala... Marinate 2h, grill 10 min each side."</p>
+                    </div>
                     <Textarea
-                      placeholder={"Paste the recipe caption from Instagram, TikTok, Facebook, etc.\n\nExample:\n'My famous chicken tikka! You'll need:\n- 1 lb chicken\n- 1 cup yogurt...'"}
+                      placeholder="Paste recipe text here..."
                       value={socialText}
                       onChange={(e) => setSocialText(e.target.value)}
-                      className="min-h-[100px] text-xs"
+                      className="min-h-[90px] text-xs"
                     />
+                    <p className="text-xs text-muted-foreground">Works with Instagram captions, TikTok descriptions, Facebook posts, or any recipe text</p>
                     <Button
                       type="button"
                       variant="secondary"
@@ -796,7 +859,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                       disabled={isSocialImporting || !socialText.trim()}
                     >
                       {isSocialImporting ? (
-                        <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Extracting recipe...</>
+                        <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Reading recipe...</>
                       ) : (
                         <><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Extract Recipe with AI</>
                       )}
@@ -805,8 +868,9 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                 ) : (
                   <div className="space-y-2">
                     <div
-                      className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-orange-500/50 transition-colors"
-                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-border rounded-lg overflow-hidden cursor-pointer hover:border-orange-500/50 transition-colors"
+                      style={{ minHeight: 96 }}
+                      onClick={() => !isSocialImporting && fileInputRef.current?.click()}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
@@ -815,22 +879,29 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                       }}
                     >
                       {isSocialImporting ? (
-                        <div className="flex flex-col items-center gap-2">
+                        <div className="flex flex-col items-center justify-center gap-2 p-6">
                           <Loader2 className="h-6 w-6 animate-spin text-orange-400" />
-                          <p className="text-xs text-muted-foreground">Extracting recipe from screenshot...</p>
+                          <p className="text-xs text-muted-foreground">Reading recipe from image...</p>
+                        </div>
+                      ) : imagePreview ? (
+                        <div className="relative">
+                          <img src={imagePreview} alt="Preview" className="w-full max-h-40 object-cover" />
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                            <p className="text-white text-xs font-semibold">Click to change</p>
+                          </div>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center gap-2">
+                        <div className="flex flex-col items-center justify-center gap-2 p-6">
                           <Upload className="h-6 w-6 text-muted-foreground" />
                           <p className="text-sm font-medium">Drop screenshot here or click to browse</p>
-                          <p className="text-xs text-muted-foreground">PNG, JPG, WebP — max 4 MB</p>
+                          <p className="text-xs text-muted-foreground">PNG, JPG, WebP, HEIC — max 10 MB</p>
                         </div>
                       )}
                     </div>
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -878,8 +949,8 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label>Cuisine *</Label>
-              <Select value={cuisine} onValueChange={setCuisine}>
-                <SelectTrigger data-testid="select-cuisine">
+              <Select value={cuisine} onValueChange={(v) => { setCuisine(v); setFormErrors(e => ({ ...e, cuisine: undefined })); }}>
+                <SelectTrigger data-testid="select-cuisine" className={cn(formErrors.cuisine && "border-destructive")}>
                   <SelectValue placeholder="Select..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -890,11 +961,12 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
+              {formErrors.cuisine && <p className="text-xs text-destructive">{formErrors.cuisine}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Meal Type *</Label>
-              <Select value={mealType} onValueChange={setMealType}>
-                <SelectTrigger data-testid="select-meal-type">
+              <Select value={mealType} onValueChange={(v) => { setMealType(v); setFormErrors(e => ({ ...e, mealType: undefined })); }}>
+                <SelectTrigger data-testid="select-meal-type" className={cn(formErrors.mealType && "border-destructive")}>
                   <SelectValue placeholder="Select..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -903,6 +975,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                   <SelectItem value="either">Either</SelectItem>
                 </SelectContent>
               </Select>
+              {formErrors.mealType && <p className="text-xs text-destructive">{formErrors.mealType}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Difficulty</Label>
