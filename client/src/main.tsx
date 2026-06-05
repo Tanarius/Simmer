@@ -23,10 +23,30 @@ if (!window.location.hash) {
   window.location.hash = "#/";
 }
 
-// Register service worker for offline support
+// Register service worker and auto-update on new deploys.
 if ("serviceWorker" in navigator) {
+  // Reload once when the active SW changes (new deploy activated).
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!refreshing) { refreshing = true; window.location.reload(); }
+  });
+
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
+    navigator.serviceWorker.register("/sw.js").then((reg) => {
+      // If a new SW is already waiting (e.g. user had the page open during deploy), activate it.
+      if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+
+      // When a new SW installs while the page is open, activate it immediately.
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener("statechange", () => {
+          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+            newWorker.postMessage({ type: "SKIP_WAITING" });
+          }
+        });
+      });
+    }).catch(() => {
       // SW registration failed — app still works, just no offline cache
     });
   });

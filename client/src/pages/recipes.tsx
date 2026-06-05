@@ -208,11 +208,34 @@ export default function RecipesPage() {
 
         {/* Recipe Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-44 rounded-lg" />
-            ))}
-          </div>
+          <>
+            <style>{`
+              @keyframes recipe-shimmer {
+                0%   { background-position: -200% 0; }
+                100% { background-position:  200% 0; }
+              }
+              .recipe-skeleton-shimmer {
+                background: linear-gradient(90deg, #2A1F18 25%, #3D2E24 50%, #2A1F18 75%);
+                background-size: 200% 100%;
+                animation: recipe-shimmer 1.5s infinite;
+              }
+            `}</style>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="rounded-xl overflow-hidden border" style={{ border: "1px solid #3D2E24" }}>
+                  <div className="recipe-skeleton-shimmer" style={{ height: 160 }} />
+                  <div className="p-3 space-y-2" style={{ background: "#2A1F18" }}>
+                    <div className="recipe-skeleton-shimmer rounded" style={{ height: 18, width: "65%" }} />
+                    <div className="flex gap-1.5">
+                      <div className="recipe-skeleton-shimmer rounded-full" style={{ height: 18, width: 52 }} />
+                      <div className="recipe-skeleton-shimmer rounded-full" style={{ height: 18, width: 40 }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+
         ) : recipes?.length === 0 ? (
           /* Library is empty — guide new users */
           <div className="flex flex-col items-center justify-center py-20 text-center gap-4">

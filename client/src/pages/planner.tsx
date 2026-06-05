@@ -20,7 +20,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { WeeklyPlanAI } from "@/components/WeeklyPlanAI";
 import { getFoodEmoji, getCuisineGradient } from "@/lib/food-emoji";
 
@@ -200,13 +200,14 @@ interface SlotProps {
   onClear: () => void;
   isPending: boolean;
   onMobileTap?: () => void;
+  onViewRecipe?: (id: number) => void;
   addedBy?: string;
   slotReactions: MealReaction[];
   currentUserId?: number;
   onReact: (slotKey: string, emoji: string | null) => void;
 }
 
-function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isPending, onMobileTap, addedBy, slotReactions, currentUserId, onReact }: SlotProps) {
+function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isPending, onMobileTap, onViewRecipe, addedBy, slotReactions, currentUserId, onReact }: SlotProps) {
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: slotKey });
   // Make filled slots draggable so they can be moved between days
   const { setNodeRef: setDragRef, listeners: dragListeners, attributes: dragAttributes, isDragging } = useDraggable({
@@ -246,7 +247,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
           isDragging ? "opacity-30 cursor-grabbing" : recipe ? "cursor-grab" : "",
         )}
         data-testid={`slot-filled-${slotKey}`}
-        onClick={!isDragging ? onMobileTap : undefined}
+        onClick={!isDragging ? (onMobileTap ?? (recipe?.id != null ? () => onViewRecipe?.(recipe.id!) : undefined)) : undefined}
         {...(recipe ? dragListeners : {})}
         {...(recipe ? dragAttributes : {})}
       >
@@ -429,6 +430,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PlannerPage() {
+  const [, setLocation] = useLocation();
   const [weekOffset, setWeekOffset] = useState(0);
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [sidebarFilter, setSidebarFilter] = useState<"all" | "lunch" | "dinner">("all");
@@ -828,6 +830,10 @@ export default function PlannerPage() {
                         key={`${day}_${mt}`}
                         label={mealLabels[mt]}
                         {...slotSharedProps(day, mt)}
+                        onViewRecipe={(id) => {
+                          sessionStorage.setItem("openRecipeId", String(id));
+                          setLocation("/recipes");
+                        }}
                       />
                     ))
                   )}

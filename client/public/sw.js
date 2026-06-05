@@ -1,16 +1,21 @@
 // Simmer service worker — app shell caching for offline support
-const CACHE = "simmer-shell-v1";
+// Bump this version string on every deploy to force cache invalidation.
+const CACHE = "simmer-shell-v2";
 const SHELL = ["/", "/manifest.json"];
 
 // ── Install: pre-cache app shell ──────────────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(SHELL))
+    // Delete ALL caches at install time so the fresh SW always starts clean,
+    // then pre-cache the minimal shell.
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => caches.open(CACHE).then((c) => c.addAll(SHELL)))
   );
   self.skipWaiting();
 });
 
-// ── Activate: purge stale caches ──────────────────────────────────────────
+// ── Activate: purge any leftover stale caches ─────────────────────────────
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -20,6 +25,13 @@ self.addEventListener("activate", (event) => {
       )
   );
   self.clients.claim();
+});
+
+// ── Message: allow the page to trigger immediate activation ───────────────
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 // ── Fetch ─────────────────────────────────────────────────────────────────

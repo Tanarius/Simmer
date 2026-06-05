@@ -216,6 +216,7 @@ export default function ShoppingPage() {
   const [copilotInput, setCopilotInput] = useState("");
   const [copilotLoading, setCopilotLoading] = useState(false);
   const [copilotError, setCopilotError] = useState("");
+  const [hasSentCopilot, setHasSentCopilot] = useState(false);
   const [copilotSessionId] = useState(() => `shopping-${Date.now()}`);
   const copilotInputRef = useRef<HTMLInputElement>(null);
   const lastSyncedPlanRef = useRef<string | null>(null);
@@ -446,9 +447,11 @@ export default function ShoppingPage() {
 
   // ── Copilot quick-add ──────────────────────────────────────────────────────
 
-  async function handleCopilotSubmit() {
-    const message = copilotInput.trim();
+  async function handleCopilotSubmit(overrideText?: string) {
+    const message = (overrideText ?? copilotInput).trim();
     if (!message || copilotLoading) return;
+    if (overrideText) setCopilotInput(overrideText);
+    setHasSentCopilot(true);
     setCopilotLoading(true);
     setCopilotError("");
     try {
@@ -652,6 +655,25 @@ export default function ShoppingPage() {
       {/* ── Copilot quick-add bar — always visible ─────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 z-10 border-t border-border/50 bg-background/95 backdrop-blur-sm p-3 md:p-4 pb-6">
         <div className="max-w-2xl mx-auto">
+        {!hasSentCopilot && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {[
+              "What can I make with chicken tonight?",
+              "Plan my week with quick meals",
+              "Add pasta to my shopping list",
+              "What am I missing for this week?",
+            ].map((chip) => (
+              <button
+                key={chip}
+                onClick={() => handleCopilotSubmit(chip)}
+                className="px-3 py-1 rounded-full text-xs font-medium border transition-colors"
+                style={{ background: "#2A1F18", border: "1px solid #3D2E24", color: "#C96A3A" }}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        )}
         {copilotError && (
           <p className="text-xs text-red-400 mb-1.5 px-1">{copilotError}</p>
         )}
@@ -668,7 +690,7 @@ export default function ShoppingPage() {
           />
           <Button
             size="icon"
-            onClick={handleCopilotSubmit}
+            onClick={() => handleCopilotSubmit()}
             disabled={copilotLoading || !copilotInput.trim()}
             className="h-9 w-9 shrink-0 bg-[#C96A3A] hover:bg-[#A85530] text-white"
           >

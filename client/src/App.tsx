@@ -12,6 +12,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { UpgradeBanner } from "@/components/UpgradeBanner";
 import InstallPrompt from "@/components/InstallPrompt";
+import { OnboardingTooltip } from "@/components/OnboardingTooltip";
 import NotFound from "@/pages/not-found";
 import RecipesPage from "@/pages/recipes";
 import PlannerPage from "@/pages/planner";
@@ -163,6 +164,7 @@ function App() {
         <AppLayout />
         <Toaster />
         <InstallPrompt />
+        <OnboardingTooltip />
       </TooltipProvider>
     </QueryClientProvider>
   );
