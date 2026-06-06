@@ -11,7 +11,7 @@ import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, u
 import { guessCategory, guessCuisine } from "./utils/categorization";
 import { detectTags } from "./utils/autoTag";
 import { buildShoppingList } from "./utils/shoppingList";
-import { enrichWithNutrition, extractRecipeByUrl } from "./services/spoonacular";
+import { enrichWithNutrition, extractRecipeByUrl, searchRecipeImage } from "./services/spoonacular";
 
 /**
  * Parse an ISO 8601 duration (e.g. PT1H30M, PT45M, PT2H) into minutes.
@@ -282,6 +282,21 @@ export async function registerRoutes(server: Server, app: Express) {
           if (nutrition) storage.updateRecipeNutrition(recipe.id, JSON.stringify(nutrition)).catch(() => {});
         }).catch(() => {});
       }
+    }
+
+    // Fire-and-forget image fetch if imageUrl is null
+    if (!recipe.imageUrl) {
+      setImmediate(async () => {
+        try {
+          const { imageUrl: url } = await searchRecipeImage(recipe.name);
+          if (url) {
+            await storage.updateRecipe(recipe.id, householdId, { imageUrl: url } as any);
+            console.log(`[auto-image] fetched for "${recipe.name}": ${url}`);
+          }
+        } catch (e) {
+          console.warn(`[auto-image] failed for recipe ${recipe.id}:`, (e as any)?.message);
+        }
+      });
     }
 
     // Auto-clean instructions in background — best-effort, never blocks the response
@@ -742,21 +757,23 @@ export async function registerRoutes(server: Server, app: Express) {
 
     try {
       // ── Strategy 1: Direct fetch + JSON-LD / HTML parsing ─────────────────
-      // Works for most recipe blogs and sites that serve server-rendered HTML.
       let recipeData: any = null;
       let html = "";
+      console.log(`[import-url] strategy=json-ld/html url=${url}`);
       try {
         html = await fetchHtml(url);
-        recipeData = extractRecipeJsonLd(html) ?? extractRecipeFallback(html);
-      } catch {
-        // Site blocked direct fetch — fall through to Spoonacular
+        const jsonLd = extractRecipeJsonLd(html);
+        console.log(`[import-url] json-ld found:`, jsonLd ? `"${jsonLd.name ?? "(no name)"}"` : "null");
+        const fallback = jsonLd ? null : extractRecipeFallback(html);
+        if (fallback) console.log(`[import-url] html-fallback found:`, `"${fallback.name ?? "(no name)"}", ${fallback.recipeIngredient?.length ?? 0} ingredients`);
+        recipeData = jsonLd ?? fallback;
+      } catch (e) {
+        console.log(`[import-url] direct fetch failed:`, (e as any)?.message);
       }
 
-      if (recipeData) console.log(`[import-url] strategy=json-ld/html url=${url}`);
+      if (recipeData) console.log(`[import-url] strategy=json-ld/html succeeded`);
 
       // ── Strategy 2: Spoonacular extract API ────────────────────────────────
-      // Handles Cloudflare-protected sites (AllRecipes, Food Network, Tasty,
-      // Serious Eats…) and any other site our server can't reach directly.
       if (!recipeData) {
         console.log(`[import-url] strategy=spoonacular url=${url}`);
         const sp = await extractRecipeByUrl(url);
@@ -801,7 +818,8 @@ export async function registerRoutes(server: Server, app: Express) {
       }
 
       if (!recipeData) {
-        return res.status(400).json({ error: "No recipe data found on this page. This site may use JavaScript rendering. Try pasting the recipe text using the 'Import from social/text' option instead." });
+        console.log(`[import-url] all strategies failed for ${url}`);
+        return res.status(400).json({ error: "NO_RECIPE_FOUND" });
       }
 
       // ── Parse JSON-LD / HTML-scraped data ──────────────────────────────────

@@ -540,19 +540,19 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
 
   function classifyImportError(msg: string): string {
     const m = msg.toLowerCase();
+    if (m.includes("no_recipe_found") || m.includes("no recipe found") || m.includes("javascript rendering") || m.includes("not found on this page")) {
+      return `Couldn't import from that URL.\n\nWorks best with: Budget Bytes, Pinch of Yum, Food52, Tasty, Half Baked Harvest, Serious Eats.\n\nDoesn't work with: AllRecipes, NYT Cooking, Food Network (they block imports).\n\nTry pasting the recipe text in the Instagram/Social tab instead →`;
+    }
     if (m.includes("403") || m.includes("blocked") || m.includes("forbidden") || m.includes("cloudflare") || m.includes("does not allow")) {
-      return "This site doesn't allow automatic import. Try copying the recipe text and using the Instagram/Social tab instead, or add it manually.";
+      return "This site blocks automatic import. Copy the recipe text and use the Instagram/Social tab, or add it manually.";
     }
     if (m.includes("timeout") || m.includes("timed out") || m.includes("408") || m.includes("slow") || m.includes("could not reach")) {
       return "We couldn't reach that page. Check the link works in your browser, then try again.";
     }
-    if (m.includes("no recipe") || m.includes("javascript rendering") || m.includes("not found on this page")) {
-      return "No recipe found on that page. Try the Instagram/Social tab to paste the recipe text instead.";
-    }
     if (m.includes("invalid") || m.includes("url is required")) {
-      return "That doesn't look like a valid recipe URL. Try a link from AllRecipes, Food Network, Tasty, or similar recipe sites.";
+      return "That doesn't look like a valid recipe URL. Try a link from Budget Bytes, Tasty, Food52, or similar recipe sites.";
     }
-    return "Couldn't import from that URL. You can paste the recipe text using the Instagram/Social tab.";
+    return `Couldn't import from that URL.\n\nWorks best with: Budget Bytes, Pinch of Yum, Food52, Tasty.\nDoesn't work with: AllRecipes, NYT Cooking, Food Network.\n\nTry the Instagram/Social tab to paste the recipe text →`;
   }
 
   async function handleImportUrl() {
@@ -796,7 +796,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                   </p>
                 )}
                 {importError ? (
-                  <p className="text-xs text-destructive flex items-start gap-1.5">
+                  <p className="text-xs text-destructive flex items-start gap-1.5 whitespace-pre-line">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />{importError}
                   </p>
                 ) : (
