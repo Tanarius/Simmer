@@ -118,32 +118,52 @@ export async function enrichWithNutrition(recipeName: string, ingredients: strin
 
 // ─── Image lookup for a named recipe (used by copilot execute-tool) ───────────
 
+const STRIP_ADJ = /^(classic|homemade|easy|quick|simple|perfect|best|sheet pan|fresh|healthy|crispy|creamy|loaded|ultimate|slow cooker|one[ -]pot|one[ -]pan|instant pot|air fryer)\s+/i;
+function simplifyName(name: string): string {
+  return name.replace(STRIP_ADJ, "").trim();
+}
+
+async function spoonacularImageSearch(query: string, apiKey: string): Promise<string | null> {
+  try {
+    const res = await axios.get("https://api.spoonacular.com/recipes/complexSearch", {
+      params: { query, number: 1, addRecipeInformation: false, apiKey },
+      timeout: 5000,
+    });
+    const r = res.data?.results?.[0];
+    return r?.image ? String(r.image).replace(/-\d+x\d+\./, "-636x393.") : null;
+  } catch { return null; }
+}
+
 export async function searchRecipeImage(recipeName: string): Promise<RecipeImageResult> {
   const apiKey = process.env.SPOONACULAR_API_KEY;
+  const simplified = simplifyName(recipeName);
+
   if (apiKey) {
-    try {
-      const res = await axios.get("https://api.spoonacular.com/recipes/complexSearch", {
-        params: { query: recipeName, number: 1, addRecipeInformation: true, apiKey },
-        timeout: 5000,
-      });
-      const r = res.data?.results?.[0];
-      if (r) {
-        return {
-          imageUrl: r.image ? r.image.replace(/-\d+x\d+\./, "-636x393.") : null,
-          sourceUrl: r.sourceUrl || null,
-          spoonacularId: r.id || null,
-        };
-      }
-    } catch { /* fall through */ }
+    // Build query variants: full → adjective-stripped → drop last word (for "X Y Bowl/Pasta/etc.")
+    const words = simplified.split(" ");
+    const dropLast  = words.length > 2 ? words.slice(0, -1).join(" ") : null;
+    const lastTwo   = words.length > 2 ? words.slice(-2).join(" ") : null;
+    const queries = [
+      recipeName,
+      ...(simplified !== recipeName ? [simplified] : []),
+      ...(dropLast ? [dropLast] : []),
+      ...(lastTwo  ? [lastTwo]  : []),
+    ];
+    for (const query of queries) {
+      const url = await spoonacularImageSearch(query, apiKey);
+      if (url) return { imageUrl: url, sourceUrl: null, spoonacularId: null };
+    }
   }
 
-  // Free fallback: TheMealDB
-  try {
-    const q = encodeURIComponent(recipeName.split(" ").slice(0, 3).join(" "));
-    const res = await axios.get(`https://www.themealdb.com/api/json/v1/1/search.php?s=${q}`, { timeout: 4000 });
-    const meal = res.data?.meals?.[0];
-    if (meal) return { imageUrl: meal.strMealThumb || null, sourceUrl: meal.strSource || null, spoonacularId: null };
-  } catch { /* ignore */ }
+  // Free fallback: TheMealDB — try simplified first (shorter = better match)
+  for (const name of [simplified, recipeName]) {
+    try {
+      const q = encodeURIComponent(name.split(" ").slice(0, 3).join(" "));
+      const res = await axios.get(`https://www.themealdb.com/api/json/v1/1/search.php?s=${q}`, { timeout: 4000 });
+      const meal = res.data?.meals?.[0];
+      if (meal?.strMealThumb) return { imageUrl: meal.strMealThumb, sourceUrl: meal.strSource || null, spoonacularId: null };
+    } catch { /* ignore */ }
+  }
 
   return { imageUrl: null, sourceUrl: null, spoonacularId: null };
 }
