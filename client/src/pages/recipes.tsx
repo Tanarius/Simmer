@@ -220,7 +220,7 @@ export default function RecipesPage() {
                 animation: recipe-shimmer 1.5s infinite;
               }
             `}</style>
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="rounded-xl overflow-hidden border" style={{ border: "1px solid #3D2E24" }}>
                   <div className="recipe-skeleton-shimmer" style={{ height: 160 }} />
@@ -271,7 +271,7 @@ export default function RecipesPage() {
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-card/40 p-3 sm:p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4" data-testid="grid-recipes">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4" data-testid="grid-recipes">
               {filteredRecipes.map((recipe) => (
                 <RecipeCard
                   key={recipe.id}

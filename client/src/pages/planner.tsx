@@ -654,7 +654,7 @@ export default function PlannerPage() {
       <div className="flex h-full overflow-hidden">
 
         {/* ── Recipe Sidebar (desktop only) ── */}
-        <div className="hidden lg:flex w-52 flex-col border-r border-border bg-background shrink-0 overflow-hidden">
+        <div className="hidden md:flex w-52 flex-col border-r border-border bg-background shrink-0 overflow-hidden">
           <div className="px-3 py-2.5 border-b border-border space-y-2 shrink-0">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recipes</p>
             <div className="relative">
@@ -775,7 +775,7 @@ export default function PlannerPage() {
             ) : (
               <>
                 {/* Mobile: stacked day cards */}
-                <div className="lg:hidden flex-1 overflow-y-auto space-y-3">
+                <div className="md:hidden flex-1 overflow-y-auto space-y-3">
                   {DAYS.map((day, di) => (
                     <div key={day} className="bg-card border border-border rounded-xl p-3">
                       <div className="flex items-center justify-between mb-1.5">
@@ -803,7 +803,7 @@ export default function PlannerPage() {
 
                 {/* Desktop: 7-column grid */}
                 <div
-                  className="hidden lg:grid grid-cols-7 gap-2 flex-1"
+                  className="hidden md:grid grid-cols-7 gap-2 flex-1"
                   style={{ gridTemplateRows: showBreakfast ? "auto auto 1fr 1fr 1fr" : "auto auto 1fr 1fr" }}
                 >
                   {/* Day headers */}

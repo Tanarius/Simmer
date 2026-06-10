@@ -12,6 +12,9 @@ import { guessCategory, guessCuisine } from "./utils/categorization";
 import { detectTags } from "./utils/autoTag";
 import { buildShoppingList } from "./utils/shoppingList";
 import { enrichWithNutrition, extractRecipeByUrl, searchRecipeImage } from "./services/spoonacular";
+import Anthropic from "@anthropic-ai/sdk";
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 /**
  * Parse an ISO 8601 duration (e.g. PT1H30M, PT45M, PT2H) into minutes.
@@ -128,6 +131,16 @@ function cleanImportedText(text: string): string {
     .replace(/\s{2,}/g, " ")
     // Clean up spacing around punctuation
     .replace(/\s+([.,!?;:])/g, "$1")
+    .trim();
+}
+
+function cleanIngredient(name: string): string {
+  return name
+    .replace(/\(\$[\d.]+\)/g, "")   // ($0.70) price annotations
+    .replace(/\$[\d.]+/g, "")        // $1.20 bare prices
+    .replace(/^\d+\.\s*/, "")        // "1. ingredient" list numbering
+    .replace(/^step\s+\d+:?\s*/i, "") // "Step 1:" prefixes
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
@@ -613,7 +626,7 @@ export async function registerRoutes(server: Server, app: Express) {
       const res = await fetch(url, {
         headers,
         redirect: "follow",
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(8000),
       });
       if (res.ok) {
         const html = await res.text();
@@ -751,75 +764,328 @@ export async function registerRoutes(server: Server, app: Express) {
     return null;
   }
 
+  // ── Strategy 0: Jina.ai reader + Claude extraction ───────────────────────────
+  async function tryAnthropicWebSearch(url: string): Promise<any | null> {
+    const TIMEOUT_MS = 14000;
+    const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), TIMEOUT_MS));
+
+    const work = async (): Promise<any | null> => {
+      try {
+        console.log("[websearch] attempting for:", url);
+        const extractionPrompt = `Use web_search to fetch the content of this exact URL: ${url}
+
+Then extract the recipe data and return ONLY this JSON with no markdown or explanation:
+{
+  "name": "...",
+  "description": "1-2 sentence dish description, NOT instructions",
+  "ingredients": ["amount ingredient"],
+  "instructions": ["step text, no numbering"],
+  "prepTime": 15,
+  "cookTime": 30,
+  "servings": 4,
+  "cuisine": "american|italian|tex-mex|asian|mediterranean|indian|other",
+  "mealType": "breakfast|lunch|dinner",
+  "difficulty": "easy|medium|hard",
+  "imageUrl": "https://... or null"
+}
+If not a recipe: {"error": "not a recipe"}`;
+
+        const messages: any[] = [{ role: "user", content: extractionPrompt }];
+        let response = await anthropic.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1500,
+          tools: [{ type: "web_search_20250305" as any, name: "web_search" }],
+          messages,
+        });
+
+        // Anthropic executes web_search server-side; handle tool-use continuation
+        let iters = 0;
+        while (response.stop_reason === "tool_use" && iters < 3) {
+          iters++;
+          const toolUses = response.content.filter((b: any) => b.type === "tool_use");
+          messages.push({ role: "assistant", content: response.content });
+          messages.push({
+            role: "user",
+            content: toolUses.map((b: any) => ({ type: "tool_result", tool_use_id: b.id, content: "" })),
+          });
+          response = await anthropic.messages.create({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1500,
+            tools: [{ type: "web_search_20250305" as any, name: "web_search" }],
+            messages,
+          });
+        }
+
+        const textBlock = response.content.find((b: any) => b.type === "text");
+        if (!textBlock) { console.log("[websearch] no text block in response"); return null; }
+        const text = (textBlock as any).text ?? "";
+        console.log("[websearch] raw result:", text.substring(0, 200));
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(text.trim());
+        } catch {
+          const match = text.match(/\{[\s\S]*\}/);
+          if (!match) { console.log("[websearch] no JSON found in response"); return null; }
+          parsed = JSON.parse(match[0]);
+        }
+        if (parsed.error || !parsed.name || !(parsed.ingredients?.length > 0)) {
+          console.log("[websearch] result invalid or error:", parsed.error ?? "missing name/ingredients");
+          return null;
+        }
+        console.log(`[websearch] succeeded: "${parsed.name}" (${parsed.ingredients?.length} ingredients)`);
+        return parsed;
+      } catch (err) {
+        console.log("[websearch] error:", (err as any)?.message);
+        return null;
+      }
+    };
+
+    return Promise.race([work(), timeoutPromise]);
+  }
+
+  async function tryJinaExtract(url: string): Promise<any | null> {
+    try {
+      const jinaUrl = `https://r.jina.ai/${url}`;
+      console.log("[jina] fetching:", jinaUrl);
+      const res = await fetch(jinaUrl, {
+        headers: { "Accept": "text/plain", "X-Timeout": "15" },
+        signal: AbortSignal.timeout(15000),
+      });
+      console.log("[jina] response status:", res.status);
+      if (!res.ok) {
+        console.log("[jina] non-OK response, aborting");
+        return null;
+      }
+      const pageText = await res.text();
+      console.log("[jina] text length:", pageText.length);
+      console.log("[jina] first 500 chars:", pageText.substring(0, 500));
+
+      // Bail out if Jina returned an error/block page rather than real content
+      const lower = pageText.toLowerCase();
+      if (
+        pageText.length < 500 ||
+        lower.includes("access denied") ||
+        lower.includes("captcha") ||
+        (lower.includes("403") && lower.includes("forbidden")) ||
+        lower.includes("blocked by") ||
+        lower.includes("please enable javascript") ||
+        lower.includes("enable cookies")
+      ) {
+        console.log("[jina] detected error/block page, aborting");
+        return null;
+      }
+
+      const prompt = `Extract recipe information from this webpage text. Return ONLY valid JSON with no markdown or explanation:
+{
+  "name": "recipe name",
+  "description": "1-2 sentence description of the dish (NOT instructions)",
+  "ingredients": ["1 cup flour", "2 eggs"],
+  "instructions": ["Step text only, no numbers or Step X: prefixes"],
+  "prepTime": 15,
+  "cookTime": 30,
+  "servings": 4,
+  "cuisine": "american|italian|tex-mex|asian|mediterranean|indian|other",
+  "mealType": "breakfast|lunch|dinner",
+  "difficulty": "easy|medium|hard",
+  "imageUrl": "https://... or null"
+}
+Rules:
+- ingredients: plain text only, no prices, no dollar signs, no ($0.70) annotations
+- instructions: step text only, no "Step 1:" prefixes, no numbering
+- description: must be a dish description, never instruction text
+- cuisine: pick closest from the list
+- imageUrl: first food photo URL found, or null
+- If not a recipe page return: {"error":"not a recipe"}
+
+Webpage content (first 6000 chars):
+${pageText.substring(0, 6000)}`;
+
+      const aiRes = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1200,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = aiRes.content[0].type === "text" ? aiRes.content[0].text : "";
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text.trim());
+      } catch {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (!match) return null;
+        parsed = JSON.parse(match[0]);
+      }
+      if (parsed.error) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
   app.post("/api/recipes/import-url", requireAuth, async (req, res) => {
     const { url } = req.body as { url: string };
     if (!url || !isSafeUrl(url)) return res.status(400).json({ error: "URL is required and must be a public URL" });
 
     try {
-      // ── Strategy 1: Direct fetch + JSON-LD / HTML parsing ─────────────────
       let recipeData: any = null;
       let html = "";
-      console.log(`[import-url] strategy=json-ld/html url=${url}`);
-      try {
-        html = await fetchHtml(url);
-        const jsonLd = extractRecipeJsonLd(html);
-        console.log(`[import-url] json-ld found:`, jsonLd ? `"${jsonLd.name ?? "(no name)"}"` : "null");
-        const fallback = jsonLd ? null : extractRecipeFallback(html);
-        if (fallback) console.log(`[import-url] html-fallback found:`, `"${fallback.name ?? "(no name)"}", ${fallback.recipeIngredient?.length ?? 0} ingredients`);
-        recipeData = jsonLd ?? fallback;
-      } catch (e) {
-        console.log(`[import-url] direct fetch failed:`, (e as any)?.message);
+      let strategyUsed = "error";
+      const strategiesTried: string[] = [];
+      const deadline = Date.now() + 28000; // stay under Railway's 30s request timeout
+
+      // ── Strategy 0: Anthropic web_search (works from any server, no external deps) ─
+      console.log(`[import] ${url} → trying strategy=0 (anthropic-websearch)`);
+      strategiesTried.push("anthropic");
+      const webSearchResult = await tryAnthropicWebSearch(url);
+      console.log(`[import] strategy=0 result:`, webSearchResult ? JSON.stringify(webSearchResult).substring(0, 200) : "null");
+      if (webSearchResult && webSearchResult.name && (webSearchResult.ingredients?.length ?? 0) > 0) {
+        console.log(`[import] ${url} → strategy=0 succeeded name="${webSearchResult.name}"`);
+        const ingredients = (webSearchResult.ingredients as string[]).map((raw: string) => {
+          const clean = cleanIngredient(cleanImportedText(raw));
+          const parsed = parseIngredientString(clean);
+          return { name: parsed.name, amount: parsed.amount, unit: parsed.unit, category: guessCategory(clean) };
+        }).filter((i: any) => i.name);
+        const instructions = (webSearchResult.instructions as string[] ?? []).map((s: string) => cleanIngredient(cleanImportedText(s))).filter(Boolean);
+        const cuisine = guessCuisine(webSearchResult.name, webSearchResult.ingredients ?? []);
+        const prepTime = typeof webSearchResult.prepTime === "number" ? webSearchResult.prepTime : 15;
+        const cookTime = typeof webSearchResult.cookTime === "number" ? webSearchResult.cookTime : 30;
+        const tags = detectTags(webSearchResult.name, prepTime + cookTime);
+        return res.json({
+          name: webSearchResult.name,
+          description: webSearchResult.description ?? "",
+          cuisine,
+          mealType: webSearchResult.mealType ?? "dinner",
+          difficulty: webSearchResult.difficulty ?? ((prepTime + cookTime) > 60 ? "medium" : "easy"),
+          prepTime,
+          cookTime,
+          servings: typeof webSearchResult.servings === "number" ? webSearchResult.servings : 4,
+          ingredients,
+          instructions,
+          tags,
+          imageUrl: webSearchResult.imageUrl || null,
+          sourceUrl: url,
+        });
       }
 
-      if (recipeData) console.log(`[import-url] strategy=json-ld/html succeeded`);
+      // ── Strategy 1: Jina.ai + Claude extraction (works on JS-rendered sites) ─
+      if (Date.now() > deadline - 2000) {
+        console.log(`[import] ${url} → deadline reached, skipping strategy=1`);
+      } else {
+      console.log(`[import] ${url} → trying strategy=1 (jina+claude)`);
+      strategiesTried.push("jina");
+      const jinaResult = await tryJinaExtract(url);
+      console.log(`[import] strategy=1 result:`, jinaResult ? "success" : "null");
+      if (jinaResult && jinaResult.name && (jinaResult.ingredients?.length ?? 0) > 0) {
+        console.log(`[import] ${url} → strategy=1 succeeded name="${jinaResult.name}"`);
+        const ingredients = (jinaResult.ingredients as string[]).map((raw: string) => {
+          const clean = cleanIngredient(cleanImportedText(raw));
+          const parsed = parseIngredientString(clean);
+          return { name: parsed.name, amount: parsed.amount, unit: parsed.unit, category: guessCategory(clean) };
+        }).filter((i: any) => i.name);
 
-      // ── Strategy 2: Spoonacular extract API ────────────────────────────────
+        const instructions = (jinaResult.instructions as string[] ?? []).map((s: string) => cleanIngredient(cleanImportedText(s))).filter(Boolean);
+        const cuisine = guessCuisine(jinaResult.name, jinaResult.ingredients ?? []);
+        const prepTime = typeof jinaResult.prepTime === "number" ? jinaResult.prepTime : 15;
+        const cookTime = typeof jinaResult.cookTime === "number" ? jinaResult.cookTime : 30;
+        const tags = detectTags(jinaResult.name, prepTime + cookTime);
+
+        return res.json({
+          name: jinaResult.name,
+          description: jinaResult.description ?? "",
+          cuisine,
+          mealType: jinaResult.mealType ?? "dinner",
+          difficulty: jinaResult.difficulty ?? ((prepTime + cookTime) > 60 ? "medium" : "easy"),
+          prepTime,
+          cookTime,
+          servings: typeof jinaResult.servings === "number" ? jinaResult.servings : 4,
+          ingredients,
+          instructions,
+          tags,
+          imageUrl: jinaResult.imageUrl || null,
+          sourceUrl: url,
+        });
+      }
+      } // end strategy=1 else block
+
+      // ── Strategy 2: Direct fetch + JSON-LD / HTML parsing ─────────────────
+      if (Date.now() > deadline - 2000) {
+        console.log(`[import] ${url} → deadline reached, skipping strategy=2`);
+      } else {
+        console.log(`[import] ${url} → trying strategy=2 (json-ld/html)`);
+        strategiesTried.push("jsonld");
+        try {
+          html = await fetchHtml(url);
+          const jsonLd = extractRecipeJsonLd(html);
+          console.log(`[import-url] json-ld found:`, jsonLd ? `"${jsonLd.name ?? "(no name)"}"` : "null");
+          const fallback = jsonLd ? null : extractRecipeFallback(html);
+          if (fallback) console.log(`[import-url] html-fallback found:`, `"${fallback.name ?? "(no name)"}", ${fallback.recipeIngredient?.length ?? 0} ingredients`);
+          recipeData = jsonLd ?? fallback;
+        } catch (e) {
+          console.log(`[import-url] direct fetch failed:`, (e as any)?.message);
+        }
+        if (recipeData) {
+          strategyUsed = "2";
+          console.log(`[import] ${url} → strategy=2 succeeded name="${recipeData.name ?? "(no name)"}"`);
+        }
+        console.log(`[import] strategy=2 result:`, recipeData ? "success" : "null");
+      }
+
+      // ── Strategy 3: Spoonacular extract API ────────────────────────────────
       if (!recipeData) {
-        console.log(`[import-url] strategy=spoonacular url=${url}`);
-        const sp = await extractRecipeByUrl(url);
-        if (sp) {
-          // Map Spoonacular response directly to our response format and return
-          const spIngredients = sp.ingredients.map(i => ({
-            name: i.name,
-            amount: i.amount,
-            unit: i.unit,
-            category: guessCategory(i.original || i.name),
-          })).filter(i => i.name);
+        if (Date.now() > deadline - 2000) {
+          console.log(`[import] ${url} → deadline reached, skipping strategy=3`);
+        } else {
+          console.log(`[import] ${url} → trying strategy=3 (spoonacular)`);
+          strategiesTried.push("spoonacular");
+          const sp = await extractRecipeByUrl(url);
+          if (sp) {
+            console.log(`[import] ${url} → strategy=3 succeeded name="${sp.title}"`);
+            const spIngredients = sp.ingredients.map(i => ({
+              name: cleanIngredient(i.name),
+              amount: i.amount,
+              unit: i.unit,
+              category: guessCategory(i.original || i.name),
+            })).filter(i => i.name);
 
-          if (spIngredients.length === 0) {
-            return res.status(400).json({ error: "Found recipe but no ingredients could be extracted." });
+            if (spIngredients.length === 0) {
+              return res.status(400).json({ error: "Found recipe but no ingredients could be extracted.", strategiesTried });
+            }
+
+            const spInstructions = sp.instructions.filter(Boolean);
+            const totalTime = sp.readyInMinutes ?? 0;
+            const prepTime = totalTime > 0 ? Math.round(totalTime * 0.4) : 0;
+            const cookTime = totalTime > 0 ? Math.round(totalTime * 0.6) : 0;
+            const cuisine = guessCuisine(sp.title, [sp.cuisines?.[0] ?? ""]);
+            const tags = detectTags(sp.title, totalTime, sp.diets ?? []);
+            const mealType = sp.dishTypes?.includes("breakfast") ? "breakfast"
+              : sp.dishTypes?.includes("lunch") ? "lunch" : "dinner";
+
+            return res.json({
+              name: sp.title,
+              description: sp.summary.substring(0, 300),
+              cuisine,
+              mealType,
+              difficulty: totalTime > 60 || spInstructions.length > 8 ? "medium" : "easy",
+              prepTime,
+              cookTime,
+              servings: sp.servings,
+              ingredients: spIngredients,
+              instructions: spInstructions,
+              tags,
+              imageUrl: sp.imageUrl || null,
+              sourceUrl: sp.sourceUrl || url,
+            });
           }
-
-          const spInstructions = sp.instructions.filter(Boolean);
-          const totalTime = sp.readyInMinutes ?? 0;
-          const prepTime = totalTime > 0 ? Math.round(totalTime * 0.4) : 0;
-          const cookTime = totalTime > 0 ? Math.round(totalTime * 0.6) : 0;
-          const cuisine = guessCuisine(sp.title, [sp.cuisines?.[0] ?? ""]);
-          const tags = detectTags(sp.title, totalTime, sp.diets ?? []);
-          const mealType = sp.dishTypes?.includes("breakfast") ? "breakfast"
-            : sp.dishTypes?.includes("lunch") ? "lunch" : "dinner";
-
-          return res.json({
-            name: sp.title,
-            description: sp.summary.substring(0, 300),
-            cuisine,
-            mealType,
-            difficulty: totalTime > 60 || spInstructions.length > 8 ? "medium" : "easy",
-            prepTime,
-            cookTime,
-            servings: sp.servings,
-            ingredients: spIngredients,
-            instructions: spInstructions,
-            tags,
-            imageUrl: sp.imageUrl || null,
-            sourceUrl: sp.sourceUrl || url,
-          });
         }
       }
 
       if (!recipeData) {
-        console.log(`[import-url] all strategies failed for ${url}`);
-        return res.status(400).json({ error: "NO_RECIPE_FOUND" });
+        console.log(`[import] ${url} → strategy=error — all strategies failed. tried: ${strategiesTried.join(", ")}`);
+        return res.status(400).json({
+          error: "We couldn't import from that URL automatically.\n\nTry these options:\n- Copy the recipe text and paste it in the 'Instagram/Social' tab — works for any site\n- Take a screenshot of the recipe and upload it in the 'Upload Screenshot' tab\n- These sites import well: Budget Bytes, Pinch of Yum, Food52, Tasty, Serious Eats\n\nSites that block imports: AllRecipes, NYT Cooking, Food Network",
+          strategiesTried,
+        });
       }
 
       // ── Parse JSON-LD / HTML-scraped data ──────────────────────────────────
@@ -831,7 +1097,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
       const rawIngredients: string[] = recipeData.recipeIngredient || [];
       const ingredients = rawIngredients.map((raw: string) => {
-        const clean = cleanImportedText(decodeHtmlEntities(raw.replace(/<[^>]*>/g, "").trim()));
+        const clean = cleanIngredient(cleanImportedText(decodeHtmlEntities(raw.replace(/<[^>]*>/g, "").trim())));
         const parsed = parseIngredientString(clean);
         return { name: parsed.name, amount: parsed.amount, unit: parsed.unit, category: guessCategory(clean) };
       }).filter(ing => ing.name && ing.name.length > 0);
@@ -847,8 +1113,15 @@ export async function registerRoutes(server: Server, app: Express) {
         return res.status(400).json({ error: "Found recipe but no ingredients could be extracted. Try copying the recipe details manually." });
       }
 
-      const cuisine = guessCuisine(name, rawIngredients);
+      // Trust JSON-LD recipeCuisine when present, otherwise auto-detect
+      const ldCuisineRaw = typeof recipeData.recipeCuisine === "string"
+        ? recipeData.recipeCuisine
+        : Array.isArray(recipeData.recipeCuisine) ? recipeData.recipeCuisine[0] : "";
+      const cuisine = ldCuisineRaw
+        ? guessCuisine(ldCuisineRaw, rawIngredients) // let guessCuisine normalize LD cuisine names
+        : guessCuisine(name, rawIngredients);
       const tags = detectTags(name, prepTime + cookTime);
+      console.log(`[import] ${url} → strategy=2 res name="${name}"`);
 
       let imageUrl: string | null = null;
       if (recipeData.image) {

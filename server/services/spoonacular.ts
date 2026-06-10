@@ -42,7 +42,7 @@ export async function extractRecipeByUrl(url: string): Promise<SpoonacularRecipe
   try {
     const res = await axios.get('https://api.spoonacular.com/recipes/extract', {
       params: { url, analyze: false, addRecipeInformation: true, apiKey },
-      timeout: 15000,
+      timeout: 8000,
     });
     const d = res.data;
     if (!d?.title) return null;

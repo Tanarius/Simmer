@@ -544,7 +544,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
       return `Couldn't import from that URL.\n\nWorks best with: Budget Bytes, Pinch of Yum, Food52, Tasty, Half Baked Harvest, Serious Eats.\n\nDoesn't work with: AllRecipes, NYT Cooking, Food Network (they block imports).\n\nTry pasting the recipe text in the Instagram/Social tab instead →`;
     }
     if (m.includes("403") || m.includes("blocked") || m.includes("forbidden") || m.includes("cloudflare") || m.includes("does not allow")) {
-      return "This site blocks automatic import. Copy the recipe text and use the Instagram/Social tab, or add it manually.";
+      return "AllRecipes and Food Network block imports. Try Budget Bytes, Pinch of Yum, Tasty, Food52, or Half Baked Harvest instead.\n\nOr copy the recipe text and paste it in the Instagram/Social tab.";
     }
     if (m.includes("timeout") || m.includes("timed out") || m.includes("408") || m.includes("slow") || m.includes("could not reach")) {
       return "We couldn't reach that page. Check the link works in your browser, then try again.";
@@ -769,7 +769,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
               <div className="space-y-2">
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Paste a recipe URL (AllRecipes, Food Network, Tasty, etc.)"
+                    placeholder="Paste a recipe URL (Budget Bytes, Tasty, Food52, Serious Eats, etc.)"
                     value={importUrl}
                     onChange={(e) => { setImportUrl(e.target.value); setImportError(null); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleImportUrl(); } }}
@@ -796,9 +796,40 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                   </p>
                 )}
                 {importError ? (
-                  <p className="text-xs text-destructive flex items-start gap-1.5 whitespace-pre-line">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />{importError}
-                  </p>
+                  <div className="border-l-4 border-[#C96A3A] bg-[#C96A3A]/10 rounded-r-lg p-3 space-y-2">
+                    <div className="flex items-start gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px text-[#C96A3A]" />
+                      <p className="text-xs text-foreground leading-relaxed">{importError.split("\n\n")[0]}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground font-medium">Sites that work well:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { label: "Budget Bytes", url: "https://www.budgetbytes.com/category/recipes/" },
+                          { label: "Pinch of Yum", url: "https://pinchofyum.com/recipes" },
+                          { label: "Food52", url: "https://food52.com/recipes" },
+                          { label: "Tasty", url: "https://tasty.co/recipes" },
+                          { label: "Half Baked Harvest", url: "https://www.halfbakedharvest.com/category/recipes/" },
+                        ].map(site => (
+                          <button
+                            key={site.label}
+                            type="button"
+                            onClick={() => { setImportUrl(site.url); setImportError(null); }}
+                            className="text-xs px-2 py-0.5 rounded border border-[#C96A3A]/40 text-[#C96A3A] hover:bg-[#C96A3A]/10 transition-colors"
+                          >
+                            {site.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setImportTab("social")}
+                      className="text-xs font-semibold text-[#C96A3A] hover:underline flex items-center gap-1"
+                    >
+                      Switch to Social Import →
+                    </button>
+                  </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     Works with most major recipe sites. The form below will auto-fill — review and save.

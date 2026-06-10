@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Plus, Trash2, ShoppingCart, X, ChefHat, Loader2, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ interface OFFProduct {
   carbs: string | null;
   fat: string | null;
   categories: string[];
+  servingDisplay?: string;
 }
 
 interface WishlistItem {
@@ -45,13 +46,25 @@ async function apiRequest(method: string, url: string, body?: any) {
   return res.json();
 }
 
+function categoryEmoji(categories: string[]): string {
+  const cat = (categories[0] ?? "").toLowerCase();
+  if (/snack|chip|cracker|popcorn|pretzel/.test(cat)) return "🍿";
+  if (/beverage|drink|soda|juice|water|tea|coffee/.test(cat)) return "🥤";
+  if (/dairy|cheese|milk|yogurt|butter/.test(cat)) return "🧀";
+  if (/bakery|bread|cake|cookie|muffin|pastry/.test(cat)) return "🍞";
+  if (/candy|chocolate|confection|sweet/.test(cat)) return "🍫";
+  if (/frozen/.test(cat)) return "🧊";
+  if (/cereal|grain/.test(cat)) return "🥣";
+  return "🛒";
+}
+
 function ProductCard({ product, onAdd }: { product: OFFProduct; onAdd: (p: OFFProduct) => void }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:bg-accent/40 transition-colors group">
       <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
         {product.imageUrl
           ? <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain" />
-          : <Package className="h-6 w-6 text-muted-foreground" />}
+          : <span className="text-2xl select-none" role="img">{categoryEmoji(product.categories)}</span>}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{product.name}</p>
@@ -61,6 +74,9 @@ function ProductCard({ product, onAdd }: { product: OFFProduct; onAdd: (p: OFFPr
           {product.protein && <span><span className="font-medium text-foreground">{product.protein}</span> protein</span>}
           {product.carbs && <span><span className="font-medium text-foreground">{product.carbs}</span> carbs</span>}
         </div>
+        {product.servingDisplay && (
+          <p className="text-[10px] text-muted-foreground/60 mt-0.5">{product.servingDisplay}</p>
+        )}
       </div>
       <div className="flex gap-1 shrink-0">
         <Button size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => onAdd(product)}>
@@ -68,8 +84,8 @@ function ProductCard({ product, onAdd }: { product: OFFProduct; onAdd: (p: OFFPr
           Wishlist
         </Button>
         <Button size="sm" variant="default" className="h-8 px-2 text-xs" onClick={() => {
-          const q = encodeURIComponent(product.brand ? `${product.brand} ${product.name}` : product.name);
-          window.open(`https://www.instacart.com/store/search_v3/term/${q}`, "_blank");
+          const term = encodeURIComponent(product.brand ? `${product.brand} ${product.name}` : product.name);
+          window.open(`https://www.instacart.com/store/search_v3/?search_term=${term}`, "_blank");
         }}>
           <ShoppingCart className="h-3.5 w-3.5" />
         </Button>
@@ -113,10 +129,20 @@ export default function SnacksPage() {
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<OFFProduct[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [addingId, setAddingId] = useState<string | null>(null);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Clear search state when navigating away so every visit starts fresh
+  useEffect(() => {
+    return () => {
+      setQuery("");
+      setSearchResults([]);
+      setSearched(false);
+    };
+  }, []);
 
   const { data: wishlist = [], isLoading: wishlistLoading } = useQuery<WishlistItem[]>({
     queryKey: ["/api/snacks/wishlist"],
@@ -156,14 +182,14 @@ export default function SnacksPage() {
   const handleQueryChange = (val: string) => {
     setQuery(val);
     if (searchRef.current) clearTimeout(searchRef.current);
-    if (!val.trim()) { setSearchResults([]); return; }
+    if (!val.trim()) { setSearchResults([]); setSearched(false); return; }
     searchRef.current = setTimeout(async () => {
       setSearching(true);
       try {
         const res = await apiRequest("GET", `/api/snacks/products/search?q=${encodeURIComponent(val)}`);
-        setSearchResults(res);
+        setSearchResults(Array.isArray(res) ? res : []);
       } catch { setSearchResults([]); }
-      finally { setSearching(false); }
+      finally { setSearching(false); setSearched(true); }
     }, 400);
   };
 
@@ -199,15 +225,15 @@ export default function SnacksPage() {
       </div>
 
       {/* Search Results */}
-      {(searching || searchResults.length > 0) && (
+      {(searching || searched) && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {searching ? "Searching…" : `${searchResults.length} results`}
+            {searching ? "Searching…" : `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""}`}
           </p>
           {searching
             ? <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             : searchResults.length === 0
-              ? <p className="text-sm text-muted-foreground text-center py-6">No products found. Try different keywords.</p>
+              ? <p className="text-sm text-muted-foreground text-center py-6">No products found for "{query}". Try a brand name like "Lay's" or "Cheerios".</p>
               : searchResults.map(p => (
                   <ProductCard
                     key={p.offId}

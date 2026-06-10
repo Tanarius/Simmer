@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { storage } from "../storage";
-import { searchProducts } from "../services/openFoodFacts";
 import { guessCategory } from "../utils/categorization";
 import { dedupeShoppingItems } from "../utils/dedupeShoppingItems";
 import rateLimit from "express-rate-limit";
@@ -24,13 +23,154 @@ const bulkRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
-// ── Product Search (Open Food Facts) ─────────────────────────────────────────
+// ── Product Search (US-focused: Spoonacular → Nutritionix → USDA) ────────────
+
+interface ProductResult {
+  offId: string;
+  name: string;
+  brand: string;
+  imageUrl: string | null;
+  calories: number | null;
+  protein: string | null;
+  carbs: string | null;
+  fat: string | null;
+  categories: string[];
+  servingDisplay?: string;
+}
+
+async function searchSpoonacular(q: string): Promise<ProductResult[]> {
+  const key = process.env.SPOONACULAR_API_KEY;
+  if (!key) return [];
+  try {
+    console.log(`[snacks/spoon] searching "${q}"`);
+    const url = `https://api.spoonacular.com/food/products/search?query=${encodeURIComponent(q)}&number=24&apiKey=${key}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) { console.log(`[snacks/spoon] ${res.status}`); return []; }
+    const data = await res.json() as { products?: { id: number; title: string; image: string }[] };
+    const products = data.products ?? [];
+    console.log(`[snacks/spoon] ${products.length} results`);
+    return products.map(p => ({
+      offId: `sp-${p.id}`,
+      name: p.title ?? "",
+      brand: "",
+      imageUrl: p.image ? `https://spoonacular.com/productImages/${p.image}` : null,
+      calories: null,
+      protein: null,
+      carbs: null,
+      fat: null,
+      categories: [],
+    }));
+  } catch (err) {
+    console.log(`[snacks/spoon] error:`, (err as any)?.message);
+    return [];
+  }
+}
+
+async function searchNutritionix(q: string): Promise<ProductResult[]> {
+  const appId = process.env.NUTRITIONIX_APP_ID;
+  const appKey = process.env.NUTRITIONIX_APP_KEY;
+  if (!appId || !appKey) return [];
+  try {
+    console.log(`[snacks/nutritionix] searching "${q}"`);
+    const url = `https://trackapi.nutritionix.com/v2/search/instant?query=${encodeURIComponent(q)}&branded=true&self=false`;
+    const res = await fetch(url, {
+      headers: { "x-app-id": appId, "x-app-key": appKey },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) { console.log(`[snacks/nutritionix] ${res.status}`); return []; }
+    const data = await res.json() as { branded?: any[] };
+    const branded = data.branded ?? [];
+    console.log(`[snacks/nutritionix] ${branded.length} results`);
+    return branded.map(item => ({
+      offId: item.nix_item_id ?? `nix-${item.food_name}`,
+      name: item.food_name ?? "",
+      brand: item.brand_name ?? "",
+      imageUrl: item.photo?.thumb ?? null,
+      calories: typeof item.nf_calories === "number" ? Math.round(item.nf_calories) : null,
+      protein: typeof item.nf_protein === "number" ? `${Math.round(item.nf_protein)}g` : null,
+      carbs: typeof item.nf_total_carbohydrate === "number" ? `${Math.round(item.nf_total_carbohydrate)}g` : null,
+      fat: typeof item.nf_total_fat === "number" ? `${Math.round(item.nf_total_fat)}g` : null,
+      categories: [],
+    }));
+  } catch (err) {
+    console.log(`[snacks/nutritionix] error:`, (err as any)?.message);
+    return [];
+  }
+}
+
+async function searchUSDA(q: string): Promise<ProductResult[]> {
+  const apiKey = process.env.USDA_API_KEY ?? "DEMO_KEY";
+  try {
+    console.log(`[snacks/usda] searching "${q}"`);
+    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}&dataType=Branded&pageSize=24&sortBy=score&sortOrder=desc&api_key=${apiKey}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) { console.log(`[snacks/usda] ${res.status}`); return []; }
+    const data = await res.json() as { foods?: any[] };
+    const foods = data.foods ?? [];
+    console.log(`[snacks/usda] ${foods.length} results, first: ${foods[0]?.description ?? "none"}`);
+    return foods.map(f => {
+      const nutrients: { nutrientName: string; value: number }[] = f.foodNutrients ?? [];
+      const byName = (name: string) => nutrients.find(n => n.nutrientName === name)?.value ?? null;
+
+      // USDA values are per 100g — scale to serving size
+      const servingSize: number = f.servingSize ?? 100;
+      const servingUnit: string = f.servingSizeUnit ?? "g";
+      const factor = servingUnit.toLowerCase() === "g" ? servingSize / 100 : 1;
+
+      const cal = byName("Energy");
+      const prot = byName("Protein");
+      const carb = byName("Carbohydrate, by difference");
+      const fat = byName("Total lipid (fat)");
+
+      return {
+        offId: `usda-${f.fdcId}`,
+        name: f.description ?? "",
+        brand: f.brandOwner ?? f.brandName ?? "",
+        imageUrl: null,
+        calories: cal != null ? Math.round(cal * factor) : null,
+        protein: prot != null ? `${Math.round(prot * factor)}g` : null,
+        carbs: carb != null ? `${Math.round(carb * factor)}g` : null,
+        fat: fat != null ? `${Math.round(fat * factor)}g` : null,
+        categories: f.brandedFoodCategory ? [f.brandedFoodCategory] : [],
+        servingDisplay: f.servingSize ? `per ${f.servingSize}${f.servingSizeUnit}` : "per 100g",
+      };
+    });
+  } catch (err) {
+    console.log(`[snacks/usda] error:`, (err as any)?.message);
+    return [];
+  }
+}
+
+async function searchProductsMultiSource(q: string): Promise<ProductResult[]> {
+  // Strategy 1: USDA FoodData Central — primary, every US branded food
+  const usda = await searchUSDA(q);
+  if (usda.length >= 3) {
+    console.log(`[snacks] resolved via usda (${usda.length})`);
+    return usda;
+  }
+
+  // Strategy 2: Spoonacular — fallback if USDA sparse
+  console.log(`[snacks/spoon] usda returned ${usda.length}, trying spoonacular`);
+  const spoon = await searchSpoonacular(q);
+  if (spoon.length >= 3) {
+    console.log(`[snacks] resolved via spoonacular (${spoon.length})`);
+    return spoon;
+  }
+
+  const partial = [...usda, ...spoon];
+  if (partial.length >= 3) return partial;
+
+  // Strategy 3: Nutritionix — final fallback if keys set
+  const nix = await searchNutritionix(q);
+  console.log(`[snacks] resolved via nutritionix (${nix.length})`);
+  return [...partial, ...nix];
+}
 
 router.get("/products/search", requireAuth, searchRateLimit, async (req, res, next) => {
   try {
     const q = String(req.query.q ?? "").trim();
     if (!q) return res.json([]);
-    const results = await searchProducts(q);
+    const results = await searchProductsMultiSource(q);
     res.json(results);
   } catch (err) { next(err); }
 });

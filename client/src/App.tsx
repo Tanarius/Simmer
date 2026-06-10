@@ -13,6 +13,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { UpgradeBanner } from "@/components/UpgradeBanner";
 import InstallPrompt from "@/components/InstallPrompt";
 import { OnboardingTooltip } from "@/components/OnboardingTooltip";
+import { MobileNav } from "@/components/MobileNav";
 import NotFound from "@/pages/not-found";
 import RecipesPage from "@/pages/recipes";
 import PlannerPage from "@/pages/planner";
@@ -127,24 +128,27 @@ function AppShell() {
   };
 
   return (
-    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full overflow-hidden">
-        <AppSidebar />
-        <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex flex-col shrink-0">
-            <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border bg-background h-12">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
-              <ThemeToggle />
-            </div>
-            <NoEmailBanner />
-            <UpgradeBanner />
-          </header>
-          <main className="flex-1 overflow-auto">
-            <BoundedRouter />
-          </main>
+    <>
+      <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+        <div className="flex h-screen w-full overflow-hidden">
+          <AppSidebar />
+          <div className="flex flex-col flex-1 min-w-0">
+            <header className="flex flex-col shrink-0">
+              <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border bg-background h-12">
+                <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
+                <ThemeToggle />
+              </div>
+              <NoEmailBanner />
+              <UpgradeBanner />
+            </header>
+            <main className="flex-1 overflow-auto" data-main-scroll>
+              <BoundedRouter />
+            </main>
+          </div>
         </div>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+      <MobileNav />
+    </>
   );
 }
 

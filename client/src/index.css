@@ -268,3 +268,15 @@
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--muted-foreground) / 0.5);
 }
+
+/* Mobile nav portal — hide on desktop, ensure mobile content clears the bar */
+@media (min-width: 768px) {
+  .simmer-mobile-nav {
+    display: none !important;
+  }
+}
+@media (max-width: 767px) {
+  [data-main-scroll] {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}

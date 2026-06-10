@@ -57,7 +57,14 @@ export function guessCuisine(title: string, ingredients: string[]): string {
   const blob = (title + " " + ingredients.join(" ")).toLowerCase();
   if (/soy sauce|sesame|teriyaki|stir.?fry|wok|ramen|thai|fish sauce|hoisin|kimchi|miso|pad kra|rice vinegar|bok choy|asian|chinese|japanese|korean|vietnamese|szechuan|kung pao|lo mein|pho|bibimbap|bulgogi|sriracha|lemongrass/.test(blob)) return "asian";
   if (/tikka|masala|garam|tandoori|naan|basmati|paneer|samosa|curry|chutney|dal|dahl|biryani|turmeric|cumin|coriander seed|cardamom|indian/.test(blob)) return "indian";
-  if (/taco|enchilada|burrito|salsa|tortilla|quesadilla|fajita|carnitas|chipotle|jalap|tex.?mex|mexican|chile verde|tamale|queso/.test(blob)) return "tex-mex";
+  // Tex-Mex: require "tex-mex"/"mexican" as explicit labels, OR 2+ food-specific words.
+  // "salsa" and "tortilla" removed — too common in Spanish/Mediterranean cooking.
+  {
+    const texMexWords = ["taco","enchilada","burrito","quesadilla","fajita","carnitas","chipotle","jalapeño","jalap","tamale","queso","chile verde"];
+    const explicit = /tex.?mex|mexican/.test(blob);
+    const wordCount = texMexWords.filter(w => blob.includes(w)).length;
+    if (explicit || wordCount >= 2) return "tex-mex";
+  }
   if (/pasta|marinara|parmesan|mozzarella|italian|risotto|penne|fettuccine|lasagna|alfredo|prosciutto|bruschetta|bolognese|carbonara|pesto|gnocchi|ravioli|ciabatta/.test(blob)) return "italian";
   if (/hummus|falafel|tahini|shawarma|gyro|tzatziki|pita|greek|mediterranean|moroccan|feta|olives|couscous|harissa|za'atar|sumac|kebab|turkish|lebanese/.test(blob)) return "mediterranean";
   if (/bbq|barbecue|biscuit|gravy|pot roast|corn bread|soul food|southern|cajun|creole|gumbo|jambalaya|mac.?and.?cheese|burger|meatloaf|chili|american|tater tot|casserole|chicken and dump|pulled pork|sloppy joe|wild rice|pot pie|clam chowder|yankee|buffalo wing/.test(blob)) return "american";

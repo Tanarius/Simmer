@@ -15,6 +15,7 @@ export interface OFFProduct {
 export async function searchProducts(query: string, limit = 12): Promise<OFFProduct[]> {
   if (!query.trim()) return [];
   try {
+    console.log(`[openFoodFacts] searching: "${query}"`);
     const res = await axios.get("https://world.openfoodfacts.org/cgi/search.pl", {
       params: {
         search_terms: query,
@@ -61,7 +62,8 @@ export async function searchProducts(query: string, limit = 12): Promise<OFFProd
           .slice(0, 3)
           .map((c: string) => c.replace("en:", "").replace(/-/g, " ")),
       }));
-  } catch {
+  } catch (err) {
+    console.error("[openFoodFacts] search error:", (err as any)?.message);
     return [];
   }
 }

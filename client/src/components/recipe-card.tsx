@@ -57,6 +57,12 @@ function parseTags(tagsJson: string | null): string[] {
   try { return JSON.parse(tagsJson); } catch { return []; }
 }
 
+function looksLikeInstruction(text: string): boolean {
+  if (!text) return false;
+  const t = text.trim().toLowerCase();
+  return /^(step\s*\d|1\.\s|\d+\.\s|first,\s|preheat\s|combine\s|mix\s|heat\s|add\s+the|cook\s|place\s|bring\s+to|pour\s|stir\s|cut\s|slice\s|chop\s|season\s)/.test(t);
+}
+
 function AddToWeekButton({ recipe }: { recipe: Recipe }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -178,130 +184,117 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
     favoriteMutation.mutate();
   };
 
+  const methodTag = ["crockpot","slow-cook","air-fryer","grilled","one-pot","one-pan"].find(t => tags.includes(t));
+  const methodMeta: Record<string,string> = { crockpot:"🥘 Crockpot", "slow-cook":"🫕 Slow Cook", "air-fryer":"🌬️ Air Fryer", grilled:"🔥 Grilled", "one-pot":"🍲 One Pot", "one-pan":"🍳 One Pan" };
+
   return (
     <Card
       className="cursor-pointer hover-elevate transition-shadow duration-150 border border-card-border overflow-hidden"
       onClick={onClick}
       data-testid={`card-recipe-${recipe.id}`}
     >
-      {/* Visual banner — photo if available, emoji gradient fallback */}
-      <div className="relative h-36 overflow-hidden">
-        {hasImage ? (
-          <img
-            src={recipe.imageUrl!}
-            alt={recipe.name}
-            className="w-full h-full object-cover"
-            loading="lazy"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="w-full h-full bg-zinc-900 flex items-center justify-center relative overflow-hidden">
-            <div className={cn("absolute inset-0 opacity-20 bg-gradient-to-br", gradient)} />
-            <span className="relative text-5xl select-none" role="img" aria-label={recipe.name}>
-              {emoji}
+      {/* Mobile: horizontal (flex-row). sm+: vertical (flex-col). */}
+      <div className="flex sm:flex-col h-full">
+
+        {/* ── Image / emoji area ── */}
+        <div className="relative w-24 min-h-[88px] sm:w-full sm:h-36 shrink-0 overflow-hidden">
+          {hasImage ? (
+            <img
+              src={recipe.imageUrl!}
+              alt={recipe.name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="w-full h-full bg-zinc-900 flex items-center justify-center relative overflow-hidden">
+              <div className={cn("absolute inset-0 opacity-20 bg-gradient-to-br", gradient)} />
+              <span className="relative text-3xl sm:text-5xl select-none" role="img" aria-label={recipe.name}>
+                {emoji}
+              </span>
+            </div>
+          )}
+          {/* Overlay — only on sm+ where image is tall enough */}
+          {hasImage && (
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent hidden sm:block" />
+          )}
+          {/* Favorite + add-to-week buttons — on image (sm+) or in content (mobile) */}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="absolute top-1 right-1 h-7 w-7 sm:h-8 sm:w-8 bg-black/25 hover:bg-black/45 backdrop-blur-sm rounded-full"
+            onClick={handleFavorite}
+            data-testid={`button-favorite-${recipe.id}`}
+            aria-label={recipe.isFavorite ? "Remove from favorites" : "Add to favorites"}
+          >
+            <Heart className={cn("h-3.5 w-3.5 transition-colors", recipe.isFavorite ? "fill-red-500 text-red-500" : "text-white")} />
+          </Button>
+          <div className="hidden sm:block"><AddToWeekButton recipe={recipe} /></div>
+          {methodTag && (
+            <span className="absolute top-1.5 left-1.5 bg-black/40 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full hidden sm:inline">
+              {methodMeta[methodTag]}
             </span>
-          </div>
-        )}
-        {/* Dark overlay for text readability on photos */}
-        {hasImage && (
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-        )}
-        {/* Favorite button overlay */}
-        <Button
-          size="icon"
-          variant="ghost"
-          className="absolute top-1.5 right-1.5 h-8 w-8 bg-black/20 hover:bg-black/40 backdrop-blur-sm rounded-full"
-          onClick={handleFavorite}
-          data-testid={`button-favorite-${recipe.id}`}
-          aria-label={recipe.isFavorite ? "Remove from favorites" : "Add to favorites"}
-        >
-          <Heart
-            className={cn(
-              "h-4 w-4 transition-colors",
-              recipe.isFavorite
-                ? "fill-red-500 text-red-500"
-                : "text-white"
-            )}
-          />
-        </Button>
-        {/* Add to week button */}
-        <AddToWeekButton recipe={recipe} />
-        {/* Cooking-method badge — most prominent tag shown on image */}
-        {(() => {
-          const methodTag = ["crockpot","slow-cook","air-fryer","grilled","one-pot","one-pan"].find(t => tags.includes(t));
-          if (!methodTag) return null;
-          const meta: Record<string,string> = { crockpot:"🥘 Crockpot", "slow-cook":"🫕 Slow Cook", "air-fryer":"🌬️ Air Fryer", grilled:"🔥 Grilled", "one-pot":"🍲 One Pot", "one-pan":"🍳 One Pan" };
-          return <span className="absolute top-1.5 left-1.5 bg-black/40 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full">{meta[methodTag]}</span>;
-        })()}
-      </div>
-
-      <CardContent className="p-3.5">
-        {/* Title */}
-        <h3
-          className="text-sm font-semibold leading-snug text-foreground truncate mb-1"
-          data-testid={`text-recipe-name-${recipe.id}`}
-        >
-          {recipe.name}
-        </h3>
-        {recipe.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-2.5">
-            {recipe.description}
-          </p>
-        )}
-
-        {/* Badges row */}
-        <div className="flex flex-wrap gap-1.5 mb-2.5">
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-              cuisineColors[recipe.cuisine] ?? cuisineColors["other"]
-            )}
-            data-testid={`badge-cuisine-${recipe.id}`}
-          >
-            {recipe.cuisine}
-          </span>
-          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
-            {mealTypeLabels[recipe.mealType] ?? recipe.mealType}
-          </span>
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-              difficultyColors[recipe.difficulty] ?? ""
-            )}
-          >
-            {recipe.difficulty}
-          </span>
-        </div>
-
-        {/* Meta row */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1 whitespace-nowrap">
-            <Clock className="h-3 w-3 shrink-0" />
-            {formatTime(totalTime)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Utensils className="h-3 w-3" />
-            {recipe.servings} servings
-          </span>
-          {recipe.sourceUrl && (
-            <a
-              href={recipe.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-auto flex items-center gap-1 text-primary hover:underline"
-              onClick={(e) => e.stopPropagation()}
-              data-testid={`link-source-${recipe.id}`}
-              aria-label="View original recipe"
-            >
-              <ExternalLink className="h-3 w-3" />
-            </a>
           )}
         </div>
 
-        {/* Tags — color-coded with emoji */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {tags.map((tag) => {
+        {/* ── Content ── */}
+        <CardContent className="p-3 flex-1 min-w-0">
+          {/* Title */}
+          <h3
+            className="text-sm font-semibold leading-snug text-foreground line-clamp-2 sm:truncate mb-1"
+            data-testid={`text-recipe-name-${recipe.id}`}
+          >
+            {recipe.name}
+          </h3>
+
+          {/* Description — desktop only, never show instruction-like text */}
+          {recipe.description && !looksLikeInstruction(recipe.description) && (
+            <p className="hidden sm:block text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-2.5">
+              {recipe.description}
+            </p>
+          )}
+
+          {/* Badges row */}
+          <div className="flex flex-wrap gap-1 sm:gap-1.5 mb-1.5 sm:mb-2.5">
+            <span
+              className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", cuisineColors[recipe.cuisine] ?? cuisineColors["other"])}
+              data-testid={`badge-cuisine-${recipe.id}`}
+            >
+              {recipe.cuisine}
+            </span>
+            <span className="hidden sm:inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
+              {mealTypeLabels[recipe.mealType] ?? recipe.mealType}
+            </span>
+            <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", difficultyColors[recipe.difficulty] ?? "")}>
+              {recipe.difficulty}
+            </span>
+          </div>
+
+          {/* Meta row */}
+          <div className="flex items-center gap-2 sm:gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <Clock className="h-3 w-3 shrink-0" />
+              {formatTime(totalTime)}
+            </span>
+            <span className="hidden sm:flex items-center gap-1">
+              <Utensils className="h-3 w-3" />
+              {recipe.servings} servings
+            </span>
+            {recipe.sourceUrl && (
+              <a href={recipe.sourceUrl} target="_blank" rel="noopener noreferrer"
+                className="ml-auto flex items-center gap-1 text-primary hover:underline"
+                onClick={(e) => e.stopPropagation()}
+                data-testid={`link-source-${recipe.id}`} aria-label="View original recipe"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+
+          {/* Tags — desktop only */}
+          {tags.length > 0 && (
+            <div className="hidden sm:flex flex-wrap gap-1 mt-2">
+              {tags.map((tag) => {
               const meta: Record<string,{emoji:string;cls:string}> = {
                 crockpot:           {emoji:"🥘",cls:"bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800"},
                 "slow-cook":        {emoji:"🫕",cls:"bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800"},
@@ -326,6 +319,7 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
           </div>
         )}
       </CardContent>
+      </div>
     </Card>
   );
 }
