@@ -215,7 +215,13 @@ export function setupAuth(app: Express) {
         const token = crypto.randomBytes(32).toString("hex");
         const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 min
         await storage.setResetToken(user.id, token, expiry);
-        await sendPasswordResetEmail(email, token);
+        try {
+          await sendPasswordResetEmail(email, token);
+        } catch (emailErr) {
+          // Log server-side but do NOT re-throw — the user-facing response must
+          // stay generic regardless of send outcome to prevent email enumeration.
+          console.error("[forgot-password] email send failed:", emailErr);
+        }
       }
       res.json({ success: true });
     } catch (err) { next(err); }
