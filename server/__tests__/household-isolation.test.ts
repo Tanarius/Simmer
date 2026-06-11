@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 import bcrypt from "bcrypt";
+import { insertRecipeSchema } from "@shared/schema";
 
 // ── Module mocks ─────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ vi.mock("../storage", () => ({
     getRecipes: vi.fn(),
     getRecipe: vi.fn(),
     createRecipe: vi.fn(),
+    updateRecipe: vi.fn(),
     getWeeklyPlan: vi.fn(),
     getWeeklyPlans: vi.fn(),
     upsertWeeklyPlan: vi.fn(),
@@ -84,6 +86,15 @@ function appWithRoutes() {
   app.get("/api/recipes/:id", requireAuth, async (req, res) => {
     const householdId = (req.user as any).householdId;
     const recipe = await storage.getRecipe(Number(req.params.id), householdId);
+    if (!recipe) return res.status(404).json({ error: "Not found" });
+    res.json(recipe);
+  });
+
+  app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
+    const householdId = (req.user as any).householdId;
+    const parsed = insertRecipeSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    const recipe = await storage.updateRecipe(Number(req.params.id), householdId, parsed.data);
     if (!recipe) return res.status(404).json({ error: "Not found" });
     res.json(recipe);
   });
@@ -183,6 +194,32 @@ describe("Recipe isolation", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.name).toBe(recipeA.name);
+  });
+
+  it("PATCH strips householdId from the body — cannot reassign to another household", async () => {
+    s.updateRecipe.mockResolvedValue({ id: 10, name: "Renamed", householdId: HOUSEHOLD_A });
+    const agent = await agentForHousehold(HOUSEHOLD_A, 1);
+    s.getUser.mockResolvedValue({ id: 1, username: "user1", householdId: HOUSEHOLD_A });
+
+    await agent.patch("/api/recipes/10").send({ name: "Renamed", householdId: HOUSEHOLD_B });
+
+    expect(s.updateRecipe).toHaveBeenCalledTimes(1);
+    const [, passedHouseholdId, passedData] = s.updateRecipe.mock.calls[0];
+    expect(passedHouseholdId).toBe(HOUSEHOLD_A);
+    expect(passedData).not.toHaveProperty("householdId");
+  });
+
+  it("PATCH strips id from the body but lets valid columns through", async () => {
+    s.updateRecipe.mockResolvedValue({ id: 10, name: "Edited", householdId: HOUSEHOLD_A });
+    const agent = await agentForHousehold(HOUSEHOLD_A, 1);
+    s.getUser.mockResolvedValue({ id: 1, username: "user1", householdId: HOUSEHOLD_A });
+
+    await agent.patch("/api/recipes/10").send({ name: "Edited", id: 9999, householdId: HOUSEHOLD_B });
+
+    const [, , passedData] = s.updateRecipe.mock.calls[0];
+    expect(passedData).not.toHaveProperty("id");
+    expect(passedData).not.toHaveProperty("householdId");
+    expect(passedData.name).toBe("Edited");
   });
 });
 

@@ -360,30 +360,49 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUserData(userId: number, householdId: number): Promise<void> {
-    // Check if sole household member
-    const members = await db.select().from(users).where(eq(users.householdId, householdId));
-    const isSoleMember = members.length === 1;
+    // Run the whole deletion inside a transaction so any failure rolls the
+    // entire operation back. Previously this ran as independent statements and
+    // could leave the account half-deleted (user row gone, household + recipes
+    // orphaned) when a foreign-key constraint fired on shopping_list_items or
+    // snack_wishlist (both FK to households.id and were never deleted).
+    await db.transaction(async (tx) => {
+      const members = await tx.select().from(users).where(eq(users.householdId, householdId));
+      const isSoleMember = members.length === 1;
 
-    // Delete user-scoped data first
-    await db.delete(activityLog).where(eq(activityLog.userId, userId));
-    await db.delete(copilotSessions).where(eq(copilotSessions.userId, userId));
-    await db.delete(mealReactions).where(eq(mealReactions.userId, userId));
-    await db.delete(onboardingSwipes).where(eq(onboardingSwipes.userId, userId));
-    await db.delete(userOnboarding).where(eq(userOnboarding.userId, userId));
-    await db.delete(userPreferences).where(eq(userPreferences.userId, userId));
-    await db.delete(userTasteProfile).where(eq(userTasteProfile.userId, userId));
+      if (isSoleMember) {
+        // Household is being torn down — remove household-scoped rows that FK to
+        // households.id (and may FK to users.id) before the user/household rows.
+        await tx.delete(shoppingListItems).where(eq(shoppingListItems.householdId, householdId));
+        await tx.delete(snackWishlist).where(eq(snackWishlist.householdId, householdId));
+        await tx.delete(pantryStaples).where(eq(pantryStaples.householdId, householdId));
+        await tx.delete(weeklyPlans).where(eq(weeklyPlans.householdId, householdId));
+        await tx.delete(recipes).where(eq(recipes.householdId, householdId));
+        await tx.delete(householdTasteProfile).where(eq(householdTasteProfile.householdId, householdId));
+      } else {
+        // Household survives — preserve shared rows but null out references to the
+        // departing user so the users-row delete can proceed.
+        await tx.update(shoppingListItems).set({ addedBy: null }).where(eq(shoppingListItems.addedBy, userId));
+        await tx.update(shoppingListItems).set({ checkedBy: null }).where(eq(shoppingListItems.checkedBy, userId));
+        await tx.update(snackWishlist).set({ addedBy: null }).where(eq(snackWishlist.addedBy, userId));
+      }
 
-    // Delete the user row
-    await db.delete(users).where(eq(users.id, userId));
+      // User-scoped data (all FK to users.id).
+      await tx.delete(activityLog).where(eq(activityLog.userId, userId));
+      await tx.delete(copilotSessions).where(eq(copilotSessions.userId, userId));
+      await tx.delete(mealReactions).where(eq(mealReactions.userId, userId));
+      await tx.delete(onboardingSwipes).where(eq(onboardingSwipes.userId, userId));
+      await tx.delete(userOnboarding).where(eq(userOnboarding.userId, userId));
+      await tx.delete(userPreferences).where(eq(userPreferences.userId, userId));
+      await tx.delete(userTasteProfile).where(eq(userTasteProfile.userId, userId));
 
-    // If they were the sole member, clean up the household data too
-    if (isSoleMember) {
-      await db.delete(pantryStaples).where(eq(pantryStaples.householdId, householdId));
-      await db.delete(weeklyPlans).where(eq(weeklyPlans.householdId, householdId));
-      await db.delete(recipes).where(eq(recipes.householdId, householdId));
-      await db.delete(householdTasteProfile).where(eq(householdTasteProfile.householdId, householdId));
-      await db.delete(households).where(eq(households.id, householdId));
-    }
+      // The user row itself.
+      await tx.delete(users).where(eq(users.id, userId));
+
+      // Finally the household, now that nothing references it.
+      if (isSoleMember) {
+        await tx.delete(households).where(eq(households.id, householdId));
+      }
+    });
   }
 
   // Preferences & Onboarding
