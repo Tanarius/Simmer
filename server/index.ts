@@ -86,6 +86,10 @@ app.use(
   })
 );
 
+// Larger body limit only for screenshot import (images are bigger than normal JSON).
+// The client downscales first, so this is a backstop, not the common path.
+app.use("/api/ai/import-from-social", express.json({ limit: "8mb", verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
+
 // Body parsing with size limits (prevents large-payload DoS)
 app.use(
   express.json({
