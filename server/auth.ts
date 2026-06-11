@@ -131,6 +131,10 @@ export function setupAuth(app: Express) {
       if (existing) {
         return res.status(400).json({ error: "Username already exists" });
       }
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(400).json({ error: "An account with this email already exists" });
+      }
 
       // Resolve household: join existing via inviteCode, or create a new one
       let householdId: number;
@@ -149,7 +153,7 @@ export function setupAuth(app: Express) {
       const user = await storage.createUser({ username, password: hashedPassword });
       await storage.setUserHousehold(user.id, householdId);
 
-      await storage.setUserEmail(user.id, email).catch(() => {}); // ignore duplicate silently
+      await storage.setUserEmail(user.id, email);
       const updatedUser = await storage.getUser(user.id);
 
       req.login(updatedUser!, (err) => {
