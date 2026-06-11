@@ -379,7 +379,12 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
     const householdId = (req.user as any).householdId;
-    const recipe = await storage.updateRecipe(Number(req.params.id), householdId, req.body);
+    // Validate against a partial of the insert schema. insertRecipeSchema already
+    // omits id and householdId, so a malicious body cannot reassign a recipe to
+    // another household or overwrite internal columns (mass-assignment guard).
+    const parsed = insertRecipeSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    const recipe = await storage.updateRecipe(Number(req.params.id), householdId, parsed.data);
     if (!recipe) return res.status(404).json({ error: "Recipe not found" });
     res.json(recipe);
   });
