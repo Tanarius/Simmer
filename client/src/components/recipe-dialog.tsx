@@ -627,6 +627,35 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
     }
   }
 
+  // Downscale an image to <=1280px on the longest edge and re-encode as JPEG.
+  // Recipe screenshots don't need full resolution for the AI to read them, and
+  // this keeps the upload well under the server body-size limit.
+  async function downscaleImageToBase64(file: File, maxEdge = 1280, quality = 0.8): Promise<string> {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = dataUrl;
+    });
+    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl.split(",")[1]; // fallback: original
+    ctx.drawImage(img, 0, 0, w, h);
+    const out = canvas.toDataURL("image/jpeg", quality);
+    return out.split(",")[1];
+  }
+
   async function handleSocialImportImage(file: File) {
     if (file.size > 10 * 1024 * 1024) {
       toast({ title: "Image too large", description: "Please use a screenshot under 10 MB.", variant: "destructive" });
@@ -636,15 +665,9 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
     setImagePreview(preview);
     setIsSocialImporting(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const base64 = dataUrl.split(",")[1];
+      const base64 = await downscaleImageToBase64(file);
       const res = await apiRequest("POST", "/api/ai/import-from-social", {
-        mode: "image", content: base64, mimeType: file.type || "image/jpeg",
+        mode: "image", content: base64, mimeType: "image/jpeg",
       });
       const data = await res.json();
       if (data.error) {

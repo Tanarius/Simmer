@@ -119,6 +119,14 @@ export function setupAuth(app: Express) {
       if (!password || typeof password !== "string" || password.length < 8) {
         return res.status(400).json({ error: "Password must be at least 8 characters" });
       }
+      // Validate email up front — before any DB writes — so a missing or
+      // malformed email returns 400 immediately rather than stranding a
+      // half-created account (user row + household exist but email is blank).
+      const email = (req.body.email ?? "").trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+      if (!email || !emailRegex.test(email)) {
+        return res.status(400).json({ error: "A valid email address is required" });
+      }
       const existing = await storage.getUserByUsername(username);
       if (existing) {
         return res.status(400).json({ error: "Username already exists" });
@@ -141,12 +149,6 @@ export function setupAuth(app: Express) {
       const user = await storage.createUser({ username, password: hashedPassword });
       await storage.setUserHousehold(user.id, householdId);
 
-      // Email is required
-      const email = (req.body.email ?? "").trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
-      if (!email || !emailRegex.test(email)) {
-        return res.status(400).json({ error: "A valid email address is required" });
-      }
       await storage.setUserEmail(user.id, email).catch(() => {}); // ignore duplicate silently
       const updatedUser = await storage.getUser(user.id);
 
