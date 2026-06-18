@@ -49,6 +49,7 @@
   --chart-4: 45 75% 52%;
   --chart-5: 200 55% 48%;
   --font-sans: "General Sans", "Inter", sans-serif;
+  --font-serif: 'Lora', Georgia, serif;
   --radius: .5rem;
   --shadow-2xs: 0px 1px 2px 0px hsl(30 20% 20% / 0.03);
   --shadow-xs: 0px 1px 3px 0px hsl(30 20% 20% / 0.04);

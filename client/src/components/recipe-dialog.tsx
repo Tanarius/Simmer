@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatTimeBreakdown } from "@/lib/format-time";
 import { groupIngredientsByCategory } from "@/lib/ingredientCategories";
+import { RecipeImage } from "@/components/RecipeImage";
 
 const cuisineColors: Record<string, string> = {
   "tex-mex": "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
@@ -133,7 +134,6 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
   const [editName, setEditName] = useState("");
   const [editInstructions, setEditInstructions] = useState("");
   const [scaledServings, setScaledServings] = useState<number | null>(null);
-  const [imgError, setImgError] = useState(false);
   const [cookMode, setCookMode] = useState(false);
 
   const updateMutation = useMutation({
@@ -191,44 +191,37 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
   const ingredientGroups = groupIngredientsByCategory(scaledIngredients);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setScaledServings(null); setImgError(false); onClose(); } }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setScaledServings(null); onClose(); } }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-recipe-view">
 
         {/* Recipe photo banner — bleeds to dialog edges via negative margins */}
-        {recipe.imageUrl && !imgError && (
-          <div className="relative h-44 -mx-6 -mt-6 mb-2 overflow-hidden rounded-t-lg shrink-0">
-            <img
-              src={recipe.imageUrl}
-              alt={recipe.name}
-              className="w-full h-full object-cover"
-              onError={() => setImgError(true)}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-            {/* Action buttons — inset from right so they don't clash with the shadcn X button */}
-            <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
-              <Button
-                size="sm"
-                className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white gap-1.5 font-semibold"
-                onClick={() => setCookMode(true)}
-              >
-                <Flame className="h-3.5 w-3.5" />
-                Cook
+        <div className="relative h-44 -mx-6 -mt-6 mb-2 overflow-hidden rounded-t-lg shrink-0">
+          <RecipeImage recipe={recipe} size="lg" className="w-full h-full" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          {/* Action buttons — inset from right so they don't clash with the shadcn X button */}
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
+            <Button
+              size="sm"
+              className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white gap-1.5 font-semibold"
+              onClick={() => setCookMode(true)}
+            >
+              <Flame className="h-3.5 w-3.5" />
+              Cook
+            </Button>
+            {editMode ? (
+              <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm text-green-600" onClick={saveEdit} disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               </Button>
-              {editMode ? (
-                <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm text-green-600" onClick={saveEdit} disabled={updateMutation.isPending}>
-                  {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                </Button>
-              ) : (
-                <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm" onClick={startEdit} data-testid="button-edit-recipe">
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              )}
-              <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm" onClick={() => favoriteMutation.mutate()} data-testid="button-view-favorite">
-                <Heart className={cn("h-3.5 w-3.5", recipe.isFavorite ? "fill-red-500 text-red-500" : "")} />
+            ) : (
+              <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm" onClick={startEdit} data-testid="button-edit-recipe">
+                <Pencil className="h-3.5 w-3.5" />
               </Button>
-            </div>
+            )}
+            <Button size="icon" variant="secondary" className="h-8 w-8 bg-background/80 backdrop-blur-sm" onClick={() => favoriteMutation.mutate()} data-testid="button-view-favorite">
+              <Heart className={cn("h-3.5 w-3.5", recipe.isFavorite ? "fill-red-500 text-red-500" : "")} />
+            </Button>
           </div>
-        )}
+        </div>
 
         <div>
           <DialogHeader className="pb-0">
@@ -245,28 +238,6 @@ export function RecipeViewDialog({ recipe, open, onClose }: RecipeViewDialogProp
                   <DialogDescription className="mt-1 text-sm line-clamp-3 text-muted-foreground">{recipe.description}</DialogDescription>
                 )}
               </div>
-
-              {/* Action buttons when no image */}
-              {(!recipe.imageUrl || imgError) && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button size="sm" className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white gap-1.5 font-semibold" onClick={() => setCookMode(true)}>
-                    <Flame className="h-3.5 w-3.5" />
-                    Cook
-                  </Button>
-                  {editMode ? (
-                    <Button size="icon" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={saveEdit} disabled={updateMutation.isPending}>
-                      {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                    </Button>
-                  ) : (
-                    <Button size="icon" variant="ghost" onClick={startEdit} title="Edit recipe" data-testid="button-edit-recipe">
-                      <Pencil className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  )}
-                  <Button size="icon" variant="ghost" onClick={() => favoriteMutation.mutate()} data-testid="button-view-favorite">
-                    <Heart className={cn("h-4 w-4", recipe.isFavorite ? "fill-red-500 text-red-500" : "text-muted-foreground")} />
-                  </Button>
-                </div>
-              )}
             </div>
 
             {/* Metadata row */}
