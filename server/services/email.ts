@@ -18,7 +18,7 @@ export async function sendPasswordResetEmail(toEmail: string, token: string): Pr
   }
 
   const { error } = await resend.emails.send({
-    from: 'Simmer <noreply@simmer.kitchen>',
+    from: 'Simmer <support@simmer.kitchen>',
     to: toEmail,
     subject: 'Reset your Simmer password',
     html: `
