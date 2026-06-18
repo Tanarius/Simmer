@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
 import { WeeklyPlanAI } from "@/components/WeeklyPlanAI";
 import { getFoodEmoji, getCuisineGradient } from "@/lib/food-emoji";
+import { RecipeImage } from "@/components/RecipeImage";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const DAY_LABELS: Record<string, string> = {
@@ -130,10 +131,7 @@ function DraggableRecipe({ recipe }: { recipe: Recipe }) {
     id: `recipe-${recipe.id}`,
     data: { recipe },
   });
-  const emoji    = getFoodEmoji(recipe.name, recipe.cuisine);
-  const gradient = getCuisineGradient(recipe.cuisine);
   const total    = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
-  const [imgErr, setImgErr] = useState(false);
 
   return (
     <div
@@ -148,13 +146,7 @@ function DraggableRecipe({ recipe }: { recipe: Recipe }) {
       )}
     >
       <div className="w-9 h-9 rounded shrink-0 overflow-hidden">
-        {recipe.imageUrl && !imgErr ? (
-          <img src={recipe.imageUrl} alt="" className="w-full h-full object-cover" onError={() => setImgErr(true)} />
-        ) : (
-          <div className={cn("w-full h-full bg-gradient-to-br flex items-center justify-center text-base", gradient)}>
-            {emoji}
-          </div>
-        )}
+        <RecipeImage recipe={recipe} size="sm" showTitle={false} className="w-full h-full" />
       </div>
       <div className="min-w-0 flex-1 overflow-hidden">
         <p className="text-xs font-medium truncate leading-tight">{recipe.name}</p>
@@ -220,12 +212,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
   const recipe = typeof mealValue === "number" ? recipes.find(r => r.id === mealValue) ?? null : null;
   const aiName = typeof mealValue === "string" ? mealValue : null;
 
-  const emoji    = recipe ? getFoodEmoji(recipe.name, recipe.cuisine) : "🍽️";
-  const gradient = recipe ? getCuisineGradient(recipe.cuisine) : "from-zinc-400 to-zinc-600";
   const total    = recipe ? (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0) : 0;
-  const [imgErr, setImgErr] = useState(false);
-
-  useMemo(() => { setImgErr(false); }, [recipe?.id]);
 
   const mealEmoji = label === "Lunch" ? "☀️" : label === "Breakfast" ? "🌅" : "🌙";
 
@@ -237,12 +224,11 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
   })).filter(r => r.count > 0);
 
   if (recipe || aiName) {
-    const hasImg = !!recipe?.imageUrl && !imgErr;
     return (
       <div
         ref={node => { setDropRef(node); setDragRef(node); }}
         className={cn(
-          "relative group rounded-xl overflow-hidden min-h-[88px] h-full transition-all",
+          "relative group rounded-xl overflow-hidden flex flex-col min-h-[150px] h-full bg-card border border-border transition-all",
           isOver && !isDragging && "ring-2 ring-primary scale-[1.02]",
           isDragging ? "opacity-30 cursor-grabbing" : recipe ? "cursor-grab" : "",
         )}
@@ -251,49 +237,77 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
         {...(recipe ? dragListeners : {})}
         {...(recipe ? dragAttributes : {})}
       >
-        {hasImg ? (
-          <img src={recipe!.imageUrl!} alt="" className="absolute inset-0 w-full h-full object-cover" onError={() => setImgErr(true)} />
-        ) : (
-          <div className={cn("absolute inset-0 bg-gradient-to-br", recipe ? gradient : "from-stone-900 to-stone-800")} />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/10" />
+        {/* Image banner */}
+        <div className="relative h-[84px] shrink-0 overflow-hidden">
+          {recipe ? (
+            <RecipeImage key={recipe.id} recipe={recipe} size="sm" showTitle={false} className="w-full h-full" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-stone-900 to-stone-800" />
+          )}
+          {/* Top gradient for label legibility */}
+          <div className="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
+
+          {/* Meal label */}
+          <span className="absolute top-1.5 left-2 text-[10px] font-medium text-white/90 uppercase tracking-wider drop-shadow-sm">{mealEmoji} {label}</span>
+
+          {/* Attribution badge — bottom left of banner */}
+          {addedBy && (
+            <div title={`Added by ${addedBy}`} className="absolute bottom-1 left-1 text-[9px] font-bold rounded-full bg-black/50 px-1.5 py-0.5 text-white/80 backdrop-blur-sm">
+              {addedBy.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+
+          {/* Drag handle hint — shown on hover so users know the slot is draggable */}
+          {recipe && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-40 transition-opacity pointer-events-none select-none text-white text-xs">
+              ⠿
+            </div>
+          )}
+
+          {/* Remove — hover on desktop, always visible on touch */}
+          <button
+            onClick={e => { e.stopPropagation(); onClear(); }}
+            disabled={isPending}
+            className="absolute top-1 right-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity rounded-full p-1 bg-black/50 hover:bg-black/80"
+            data-testid={`button-clear-slot-${slotKey}`}
+          >
+            <X className="h-3 w-3 text-white" />
+          </button>
+        </div>
 
         {/* Content */}
-        <div className="relative p-2.5 flex flex-col h-full min-h-[88px]">
-          <span className="text-[10px] font-medium text-white/70 uppercase tracking-wider">{mealEmoji} {label}</span>
-          <div className="flex-1 flex flex-col justify-end gap-1 mt-1">
-            {recipe ? (
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className={cn("text-[10px] px-1.5 py-px rounded-full capitalize font-medium", CUISINE_COLORS[recipe.cuisine] ?? CUISINE_COLORS.other)}>
-                  {recipe.cuisine}
-                </span>
-                {parseTags(recipe.tags).includes("crockpot") && (
-                  <span className="text-[10px] px-1.5 py-px rounded-full font-medium bg-amber-500/80 text-white">🥘 Crockpot</span>
-                )}
-                {(parseTags(recipe.tags).includes("crockpot") || parseTags(recipe.tags).includes("slow-cook") || parseTags(recipe.tags).includes("make-ahead")) && (recipe.servings ?? 0) >= 4 && (
-                  <span className="text-[10px] px-1.5 py-px rounded-full font-medium bg-blue-500/70 text-white" title="Makes multiple portions — great for batch cooking">📦 Batch</span>
-                )}
-              </div>
-            ) : (
-              <span className="text-[10px] px-1.5 py-px rounded-full w-fit bg-orange-500/50 text-orange-200 font-medium">AI</span>
-            )}
-            <p className="text-white text-xs font-semibold leading-snug line-clamp-2">{recipe ? recipe.name : aiName}</p>
-            {recipe && total > 0 && (
-              <span className="text-[10px] text-white/60 flex items-center gap-0.5">
-                <Clock className="h-2.5 w-2.5" />{formatTime(total)}
+        <div className="relative flex-1 flex flex-col gap-1 p-2 min-h-0">
+          {recipe ? (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className={cn("text-[10px] px-1.5 py-px rounded-full capitalize font-medium", CUISINE_COLORS[recipe.cuisine] ?? CUISINE_COLORS.other)}>
+                {recipe.cuisine}
               </span>
-            )}
-          </div>
+              {parseTags(recipe.tags).includes("crockpot") && (
+                <span className="text-[10px] px-1.5 py-px rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">🥘 Crockpot</span>
+              )}
+              {(parseTags(recipe.tags).includes("crockpot") || parseTags(recipe.tags).includes("slow-cook") || parseTags(recipe.tags).includes("make-ahead")) && (recipe.servings ?? 0) >= 4 && (
+                <span className="text-[10px] px-1.5 py-px rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" title="Makes multiple portions — great for batch cooking">📦 Batch</span>
+              )}
+            </div>
+          ) : (
+            <span className="text-[10px] px-1.5 py-px rounded-full w-fit bg-orange-500/20 text-orange-600 dark:text-orange-300 font-medium">AI</span>
+          )}
+          <p className="text-foreground text-xs font-semibold leading-snug line-clamp-2">{recipe ? recipe.name : aiName}</p>
+          {recipe && total > 0 && (
+            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+              <Clock className="h-2.5 w-2.5" />{formatTime(total)}
+            </span>
+          )}
 
           {/* Emoji reactions strip */}
-          <div className="flex items-center gap-0.5 flex-wrap mt-1.5 min-h-[20px]">
+          <div className="flex items-center gap-0.5 flex-wrap mt-auto pt-1">
             {reactionCounts.map(({ emoji: e, count, isMe }) => (
               <button
                 key={e}
                 onClick={ev => { ev.stopPropagation(); onReact(slotKey, isMe ? null : e); }}
                 className={cn(
-                  "flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] border backdrop-blur-sm bg-black/50 transition-colors",
-                  isMe ? "border-white/50 text-white" : "border-white/20 text-white/80 hover:border-white/40"
+                  "flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] border transition-colors",
+                  isMe ? "border-primary/50 bg-primary/10 text-foreground" : "border-border bg-muted text-muted-foreground hover:border-primary/40"
                 )}
               >
                 {e} <span>{count}</span>
@@ -304,7 +318,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
               <PopoverTrigger asChild>
                 <button
                   onClick={e => e.stopPropagation()}
-                  className="flex items-center px-1.5 py-0.5 rounded-full text-[10px] border border-white/20 text-white/40 hover:text-white/70 bg-black/30 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="flex items-center px-1.5 py-0.5 rounded-full text-[10px] border border-border text-muted-foreground/60 hover:text-foreground bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   +
                 </button>
@@ -328,30 +342,6 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
             </Popover>
           </div>
         </div>
-
-        {/* Attribution badge — top left */}
-        {addedBy && (
-          <div title={`Added by ${addedBy}`} className="absolute top-1 left-1 text-[9px] font-bold rounded-full bg-black/50 px-1.5 py-0.5 text-white/80 backdrop-blur-sm">
-            {addedBy.slice(0, 2).toUpperCase()}
-          </div>
-        )}
-
-        {/* Drag handle hint — shown on hover so users know the slot is draggable */}
-        {recipe && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-40 transition-opacity pointer-events-none select-none text-white text-xs">
-            ⠿
-          </div>
-        )}
-
-        {/* Remove — hover on desktop, always visible on touch */}
-        <button
-          onClick={e => { e.stopPropagation(); onClear(); }}
-          disabled={isPending}
-          className="absolute top-1 right-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity rounded-full p-1 bg-black/50 hover:bg-black/80"
-          data-testid={`button-clear-slot-${slotKey}`}
-        >
-          <X className="h-3 w-3 text-white" />
-        </button>
       </div>
     );
   }
@@ -361,7 +351,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
       <div
         ref={setDropRef}
         className={cn(
-          "rounded-xl min-h-[88px] h-full border-2 border-dashed transition-all cursor-pointer",
+          "rounded-xl min-h-[150px] h-full border-2 border-dashed transition-all cursor-pointer",
           "flex flex-col items-center justify-center gap-1",
           isOver
             ? "border-primary bg-primary/10 scale-[1.02]"
@@ -383,7 +373,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
         <div
           ref={setDropRef}
           className={cn(
-            "rounded-xl min-h-[88px] h-full border-2 border-dashed transition-all cursor-pointer",
+            "rounded-xl min-h-[150px] h-full border-2 border-dashed transition-all cursor-pointer",
             "flex flex-col items-center justify-center gap-1",
             isOver
               ? "border-primary bg-primary/10 scale-[1.02]"
@@ -767,7 +757,7 @@ export default function PlannerPage() {
           </div>
 
           {/* Grid */}
-          <div className="flex-1 overflow-hidden flex flex-col px-3 sm:px-5 py-4">
+          <div className="flex-1 overflow-y-auto flex flex-col px-3 sm:px-5 py-4">
             {isLoading ? (
               <div className="grid grid-cols-7 gap-2">
                 {Array.from({ length: 14 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
@@ -803,8 +793,8 @@ export default function PlannerPage() {
 
                 {/* Desktop: 7-column grid */}
                 <div
-                  className="hidden md:grid grid-cols-7 gap-2 flex-1"
-                  style={{ gridTemplateRows: showBreakfast ? "auto auto 1fr 1fr 1fr" : "auto auto 1fr 1fr" }}
+                  className="hidden md:grid grid-cols-7 gap-2"
+                  style={{ gridTemplateRows: showBreakfast ? "auto auto minmax(150px,auto) minmax(150px,auto) minmax(150px,auto)" : "auto auto minmax(150px,auto) minmax(150px,auto)" }}
                 >
                   {/* Day headers */}
                   {DAYS.map((day, di) => (

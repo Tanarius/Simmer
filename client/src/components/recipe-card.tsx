@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/format-time";
-import { getFoodEmoji, getCuisineGradient } from "@/lib/food-emoji";
+import { RecipeImage } from "@/components/RecipeImage";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -163,7 +163,6 @@ interface RecipeCardProps {
 
 export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
   const queryClient = useQueryClient();
-  const [imgError, setImgError] = useState(false);
 
   const favoriteMutation = useMutation({
     mutationFn: () =>
@@ -175,9 +174,7 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
 
   const tags = parseTags(recipe.tags);
   const totalTime = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
-  const emoji = getFoodEmoji(recipe.name, recipe.cuisine);
-  const gradient = getCuisineGradient(recipe.cuisine);
-  const hasImage = recipe.imageUrl && !imgError;
+  const hasImage = !!recipe.imageUrl;
 
   const handleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -198,22 +195,7 @@ export function RecipeCard({ recipe, onClick }: RecipeCardProps) {
 
         {/* ── Image / emoji area ── */}
         <div className="relative w-24 min-h-[88px] sm:w-full sm:h-36 shrink-0 overflow-hidden">
-          {hasImage ? (
-            <img
-              src={recipe.imageUrl!}
-              alt={recipe.name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="w-full h-full bg-zinc-900 flex items-center justify-center relative overflow-hidden">
-              <div className={cn("absolute inset-0 opacity-20 bg-gradient-to-br", gradient)} />
-              <span className="relative text-3xl sm:text-5xl select-none" role="img" aria-label={recipe.name}>
-                {emoji}
-              </span>
-            </div>
-          )}
+          <RecipeImage recipe={recipe} size="md" className="w-full h-full" />
           {/* Overlay — only on sm+ where image is tall enough */}
           {hasImage && (
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent hidden sm:block" />
