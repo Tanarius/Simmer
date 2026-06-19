@@ -610,7 +610,10 @@ export async function searchRecipes(
         : Promise.resolve([] as SpoonacularRecipe[]),
     ]);
     const spoon  = filterByCuisine(spoonRes.status  === 'fulfilled' ? spoonRes.value  : []);
-    const mealDb = mealDbRes.status === 'fulfilled' ? mealDbRes.value : [];
+    // Filter TheMealDB results by cuisine too — same guarantee as `spoon`.
+    // TheMealDB's area/category fallbacks can return off-cuisine dishes (e.g. a
+    // Pasta-category miss for "mexican"), so no result reaches the user unfiltered.
+    const mealDb = filterByCuisine(mealDbRes.status === 'fulfilled' ? mealDbRes.value : []);
 
     if (spoon.length >= 3) {
       // Interleave only TheMealDB results that match cuisine
@@ -660,7 +663,7 @@ export async function searchRecipes(
     // ── Cuisine-filtered TheMealDB as last resort (matches cuisine) ─────────
     if (mealDb.length > 0) return mealDb;
     if (parsed.cuisine) {
-      const fallbackDb = await searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, count: number });
+      const fallbackDb = filterByCuisine(await searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, count: number }));
       if (fallbackDb.length > 0) return fallbackDb;
     }
 
@@ -670,7 +673,7 @@ export async function searchRecipes(
   } catch (err: any) {
     console.error('[searchRecipes] Error:', err?.message);
     if (parsed.cuisine) {
-      return searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, mealType: parsed.mealType, count: number });
+      return filterByCuisine(await searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, mealType: parsed.mealType, count: number }));
     }
     return [];
   }
@@ -722,19 +725,26 @@ function parseSpoonacularResult(r: any): SpoonacularRecipe {
 }
 
 // ── TheMealDB filter maps ──────────────────────────────────────────────────────
+// Keys MUST match the internal cuisine values passed as `parsed.cuisine`
+// (from cuisineChipToQuery + parseRecipeQuery). A key mismatch silently routes
+// the lookup to the vibe-category fallback (→ 'Pasta' → Italian dishes), which
+// was the source of the "Mexican filter returns Italian" bug.
 const MEALDB_AREA_MAP: Record<string, string[]> = {
   italian:          ['Italian'],
   asian:            ['Chinese', 'Japanese', 'Korean', 'Thai', 'Vietnamese'],
-  'tex-mex':        ['Mexican'],
+  mexican:          ['Mexican'],
+  'tex-mex':        ['Mexican'],   // legacy/alias — kept harmless
   american:         ['American'],
   indian:           ['Indian'],
   mediterranean:    ['Greek', 'Spanish', 'French', 'Moroccan'],
   japanese:         ['Japanese'],
   korean:           ['Korean'],
-  'middle-eastern': ['Moroccan', 'Turkish'],
+  chinese:          ['Chinese'],
+  thai:             ['Thai'],
+  vietnamese:       ['Vietnamese'],
+  'middle eastern': ['Moroccan', 'Turkish'],
   french:           ['French'],
   caribbean:        ['Jamaican'],
-  thai:             ['Thai'],
   greek:            ['Greek'],
 };
 
