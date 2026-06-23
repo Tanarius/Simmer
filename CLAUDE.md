@@ -19,8 +19,9 @@ This file is loaded automatically at the start of every session. Keep it current
 - Auto-deploys on `git push` to `main`
 
 ### Test Account
-- Username: `simmer_test` / Password: `SimmTest2026!` / HouseholdId: 6
-- Has 12 seeded recipes, full weekly plan, 62 shopping items
+- Credentials are NOT stored in this repo — see private notes (password manager) for the seed/test account login.
+- Seed scripts read the account username from the `SEED_TEST_USERNAME` env var (set it in your local `.env`).
+- When seeded: 12 recipes, full weekly plan, ~62 shopping items.
 
 ### Feature Status
 | Feature | Status |

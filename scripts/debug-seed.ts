@@ -7,11 +7,18 @@ import { users, recipes, households } from "../shared/schema";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 
+// Test account username comes from env so no credential literal ships in the repo.
+const TEST_USERNAME = process.env.SEED_TEST_USERNAME;
+if (!TEST_USERNAME) {
+  console.error("❌ Set SEED_TEST_USERNAME (the seed/test account username) in your .env before running this script.");
+  process.exit(1);
+}
+
 async function main() {
   // 1. Exact user row
-  const u = await db.select().from(users).where(eq(users.username, "simmer_test"));
+  const u = await db.select().from(users).where(eq(users.username, TEST_USERNAME));
   const user = u[0];
-  console.log("simmer_test:", { id: user?.id, householdId: user?.householdId });
+  console.log(`${TEST_USERNAME}:`, { id: user?.id, householdId: user?.householdId });
 
   if (!user?.householdId) { console.log("NO HOUSEHOLD"); await pool.end(); return; }
 

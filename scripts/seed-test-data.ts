@@ -10,6 +10,13 @@ import {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 
+// Test account username comes from env so no credential literal ships in the repo.
+const TEST_USERNAME = process.env.SEED_TEST_USERNAME;
+if (!TEST_USERNAME) {
+  console.error("❌ Set SEED_TEST_USERNAME (the seed/test account username) in your .env before running this script.");
+  process.exit(1);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getMondayOfWeek(date = new Date()): string {
@@ -436,19 +443,19 @@ const SHOPPING_ITEMS = [
 async function main() {
   console.log("🌱 Simmer seed script starting...\n");
 
-  // 1. Find simmer_test user
-  const userRows = await db.select().from(users).where(eq(users.username, "simmer_test"));
+  // 1. Find the test user
+  const userRows = await db.select().from(users).where(eq(users.username, TEST_USERNAME));
   if (userRows.length === 0) {
-    console.error("❌ No user with username 'simmer_test' found. Create the account first via the app.");
+    console.error(`❌ No user with username '${TEST_USERNAME}' found. Create the account first via the app.`);
     process.exit(1);
   }
   const user = userRows[0];
   const householdId = user.householdId;
   if (!householdId) {
-    console.error("❌ simmer_test has no household. Complete onboarding first.");
+    console.error(`❌ ${TEST_USERNAME} has no household. Complete onboarding first.`);
     process.exit(1);
   }
-  console.log(`✓ Found simmer_test (userId=${user.id}, householdId=${householdId})\n`);
+  console.log(`✓ Found ${TEST_USERNAME} (userId=${user.id}, householdId=${householdId})\n`);
 
   // 2. Recipes — idempotent: skip existing by name
   const existingRecipes = await db.select({ name: recipes.name }).from(recipes)
