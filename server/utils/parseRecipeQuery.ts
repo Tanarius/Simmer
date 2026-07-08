@@ -14,30 +14,32 @@ function pluck(text: string, pattern: RegExp): [string, boolean] {
   return [text.replace(pattern, ' ').replace(/\s{2,}/g, ' ').trim(), true];
 }
 
+// Text-pattern → cuisine rules used by parseRecipeQuery.
+// Exported so map-integrity tests can enumerate every cuisine the parser can emit.
+export const CUISINE_RULES: [RegExp, string, string?][] = [
+  [/\b(american|usa|u\.s\.a?|us food|all-american)\b/, 'american', 'canadian'],
+  [/\b(southern|soul\s+food|bbq|barbecue|comfort\s+food)\b/, 'american', 'canadian'],
+  [/\b(italian|italy|pasta|pizza|risotto|carbonara|bolognese|pesto|lasagna)\b/, 'italian'],
+  [/\b(mexican|mexico|tacos?|burritos?|enchiladas?|quesadillas?|guacamole|salsa)\b/, 'mexican'],
+  [/\b(tex-mex|texmex|tex\s+mex)\b/, 'mexican'],
+  [/\b(chinese|china|dim\s+sum|dumplings|fried\s+rice|chow\s+mein|orange\s+chicken)\b/, 'chinese'],
+  [/\b(japanese|japan|sushi|ramen|udon|tempura|teriyaki|miso|yakitori)\b/, 'japanese'],
+  [/\b(korean|korea|kimchi|bibimbap|bulgogi|gochujang)\b/, 'korean'],
+  [/\b(thai|thailand|pad\s+thai|green\s+curry|tom\s+yum)\b/, 'thai'],
+  [/\b(vietnamese|vietnam|pho|banh\s+mi|spring\s+rolls)\b/, 'vietnamese'],
+  [/\b(asian)\b/, 'asian'],
+  [/\b(indian|india|curry|tikka\s+masala|biryani|tandoori|saag|dal|naan)\b/, 'indian'],
+  [/\b(mediterranean|hummus|falafel|gyros?|shawarma|tabbouleh)\b/, 'mediterranean'],
+  [/\b(greek|greece)\b/, 'mediterranean'],
+  [/\b(french|france|croissant|ratatouille|boeuf|coq\s+au\s+vin)\b/, 'french'],
+  [/\b(middle\s+eastern|arabic|lebanese|persian|moroccan)\b/, 'middle eastern'],
+];
+
 export function parseRecipeQuery(raw: string): ParsedQuery {
   let t = raw.toLowerCase().trim();
   const result: ParsedQuery = { searchText: '', tags: [] };
 
   // ── Cuisine ──────────────────────────────────────────────────────────────────
-  const CUISINE_RULES: [RegExp, string, string?][] = [
-    [/\b(american|usa|u\.s\.a?|us food|all-american)\b/, 'american', 'canadian'],
-    [/\b(southern|soul\s+food|bbq|barbecue|comfort\s+food)\b/, 'american', 'canadian'],
-    [/\b(italian|italy|pasta|pizza|risotto|carbonara|bolognese|pesto|lasagna)\b/, 'italian'],
-    [/\b(mexican|mexico|tacos?|burritos?|enchiladas?|quesadillas?|guacamole|salsa)\b/, 'mexican'],
-    [/\b(tex-mex|texmex|tex\s+mex)\b/, 'mexican'],
-    [/\b(chinese|china|dim\s+sum|dumplings|fried\s+rice|chow\s+mein|orange\s+chicken)\b/, 'chinese'],
-    [/\b(japanese|japan|sushi|ramen|udon|tempura|teriyaki|miso|yakitori)\b/, 'japanese'],
-    [/\b(korean|korea|kimchi|bibimbap|bulgogi|gochujang)\b/, 'korean'],
-    [/\b(thai|thailand|pad\s+thai|green\s+curry|tom\s+yum)\b/, 'thai'],
-    [/\b(vietnamese|vietnam|pho|banh\s+mi|spring\s+rolls)\b/, 'vietnamese'],
-    [/\b(asian)\b/, 'asian'],
-    [/\b(indian|india|curry|tikka\s+masala|biryani|tandoori|saag|dal|naan)\b/, 'indian'],
-    [/\b(mediterranean|hummus|falafel|gyros?|shawarma|tabbouleh)\b/, 'mediterranean'],
-    [/\b(greek|greece)\b/, 'mediterranean'],
-    [/\b(french|france|croissant|ratatouille|boeuf|coq\s+au\s+vin)\b/, 'french'],
-    [/\b(middle\s+eastern|arabic|lebanese|persian|moroccan)\b/, 'middle eastern'],
-  ];
-
   for (const [pattern, cuisine, exclude] of CUISINE_RULES) {
     const [next, matched] = pluck(t, pattern);
     if (matched) {
@@ -143,21 +145,24 @@ export function parseRecipeQuery(raw: string): ParsedQuery {
   return result;
 }
 
+// Cuisine chip value → ParsedQuery cuisine + excludeCuisine.
+// Exported so map-integrity tests can enumerate every cuisine a chip can emit.
+export const CUISINE_CHIP_MAP: Record<string, { cuisine: string; excludeCuisine?: string }> = {
+  american:       { cuisine: 'american', excludeCuisine: 'canadian' },
+  'tex-mex':      { cuisine: 'mexican' },
+  italian:        { cuisine: 'italian' },
+  asian:          { cuisine: 'asian' },
+  mediterranean:  { cuisine: 'mediterranean' },
+  indian:         { cuisine: 'indian' },
+  japanese:       { cuisine: 'japanese' },
+  korean:         { cuisine: 'korean' },
+  thai:           { cuisine: 'thai' },
+  chinese:        { cuisine: 'chinese' },
+  french:         { cuisine: 'french' },
+  'middle-eastern': { cuisine: 'middle eastern' },
+};
+
 /** Map a cuisine chip value to the ParsedQuery cuisine + excludeCuisine */
 export function cuisineChipToQuery(choice: string): Pick<ParsedQuery, 'cuisine' | 'excludeCuisine'> {
-  const MAP: Record<string, { cuisine: string; excludeCuisine?: string }> = {
-    american:       { cuisine: 'american', excludeCuisine: 'canadian' },
-    'tex-mex':      { cuisine: 'mexican' },
-    italian:        { cuisine: 'italian' },
-    asian:          { cuisine: 'asian' },
-    mediterranean:  { cuisine: 'mediterranean' },
-    indian:         { cuisine: 'indian' },
-    japanese:       { cuisine: 'japanese' },
-    korean:         { cuisine: 'korean' },
-    thai:           { cuisine: 'thai' },
-    chinese:        { cuisine: 'chinese' },
-    french:         { cuisine: 'french' },
-    'middle-eastern': { cuisine: 'middle eastern' },
-  };
-  return MAP[choice] ?? { cuisine: choice };
+  return CUISINE_CHIP_MAP[choice] ?? { cuisine: choice };
 }

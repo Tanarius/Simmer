@@ -520,6 +520,21 @@ const CUISINE_EXCLUSIONS: Record<string, string> = {
 // Skip exact-match post-filter for these; they're correct by construction.
 const BROAD_CUISINES = new Set(['asian', 'mediterranean']);
 
+// Post-process: hard filter to remove results that don't match the requested cuisine.
+// Rules:
+//   - No cuisine filter active → pass everything through
+//   - Broad cuisines (asian, mediterranean) → pass everything through (sub-cuisines vary)
+//   - Specific cuisine requested:
+//       * cuisines[] is empty → DROP (unclassified ≠ American/Italian/etc.)
+//       * cuisines[] present → KEEP only if it includes the requested cuisine (case-insensitive)
+export function filterByCuisine(results: SpoonacularRecipe[], cuisine?: string): SpoonacularRecipe[] {
+  if (!cuisine || BROAD_CUISINES.has(cuisine)) return results;
+  return results.filter(r =>
+    r.cuisines.length > 0 &&
+    r.cuisines.some(c => c.toLowerCase() === cuisine.toLowerCase())
+  );
+}
+
 export async function searchRecipes(
   parsed: ParsedQuery,
   options: { number?: number; offset?: number; sort?: string } = {}
@@ -578,21 +593,6 @@ export async function searchRecipes(
     console.log(`[searchRecipes ${level}] /recipes/complexSearch?${p}`);
   }
 
-  // Post-process: hard filter to remove results that don't match requested cuisine.
-  // Rules:
-  //   - No cuisine filter active → pass everything through
-  //   - Broad cuisines (asian, mediterranean) → pass everything through (sub-cuisines vary)
-  //   - Specific cuisine requested:
-  //       * cuisines[] is empty → DROP (unclassified ≠ American/Italian/etc.)
-  //       * cuisines[] present → KEEP only if it includes the requested cuisine (case-insensitive)
-  function filterByCuisine(results: SpoonacularRecipe[]): SpoonacularRecipe[] {
-    if (!parsed.cuisine || BROAD_CUISINES.has(parsed.cuisine)) return results;
-    return results.filter(r =>
-      r.cuisines.length > 0 &&
-      r.cuisines.some(c => c.toLowerCase() === parsed.cuisine!.toLowerCase())
-    );
-  }
-
   // ── Level 1: full params ───────────────────────────────────────────────────
   const l1: Record<string, any> = buildBase({ offset: 0 });
   if (parsed.searchText) l1.query = parsed.searchText;
@@ -609,11 +609,11 @@ export async function searchRecipes(
         ? searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, mealType: parsed.mealType, count: Math.ceil(number / 2) })
         : Promise.resolve([] as SpoonacularRecipe[]),
     ]);
-    const spoon  = filterByCuisine(spoonRes.status  === 'fulfilled' ? spoonRes.value  : []);
+    const spoon  = filterByCuisine(spoonRes.status  === 'fulfilled' ? spoonRes.value  : [], parsed.cuisine);
     // Filter TheMealDB results by cuisine too — same guarantee as `spoon`.
     // TheMealDB's area/category fallbacks can return off-cuisine dishes (e.g. a
     // Pasta-category miss for "mexican"), so no result reaches the user unfiltered.
-    const mealDb = filterByCuisine(mealDbRes.status === 'fulfilled' ? mealDbRes.value : []);
+    const mealDb = filterByCuisine(mealDbRes.status === 'fulfilled' ? mealDbRes.value : [], parsed.cuisine);
 
     if (spoon.length >= 3) {
       // Interleave only TheMealDB results that match cuisine
@@ -638,7 +638,7 @@ export async function searchRecipes(
       if (parsed.diet) l2.diet = parsed.diet;
       // no query= here — searchText dropped
       logUrl(l2, 'L2');
-      const r2 = filterByCuisine(await complexSearch(l2));
+      const r2 = filterByCuisine(await complexSearch(l2), parsed.cuisine);
       if (r2.length >= 3) return r2;
     }
 
@@ -648,7 +648,7 @@ export async function searchRecipes(
       applyMealType(l3);
       if (parsed.diet) l3.diet = parsed.diet;
       logUrl(l3, 'L3');
-      const r3 = filterByCuisine(await complexSearch(l3));
+      const r3 = filterByCuisine(await complexSearch(l3), parsed.cuisine);
       if (r3.length >= 3) return r3;
     }
 
@@ -656,14 +656,14 @@ export async function searchRecipes(
     {
       const l4 = buildBase({ offset: Math.floor(Math.random() * 30), sort: 'popularity' });
       logUrl(l4, 'L4');
-      const r4 = filterByCuisine(await complexSearch(l4));
+      const r4 = filterByCuisine(await complexSearch(l4), parsed.cuisine);
       if (r4.length > 0) return r4;
     }
 
     // ── Cuisine-filtered TheMealDB as last resort (matches cuisine) ─────────
     if (mealDb.length > 0) return mealDb;
     if (parsed.cuisine) {
-      const fallbackDb = filterByCuisine(await searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, count: number }));
+      const fallbackDb = filterByCuisine(await searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, count: number }), parsed.cuisine);
       if (fallbackDb.length > 0) return fallbackDb;
     }
 
@@ -673,7 +673,7 @@ export async function searchRecipes(
   } catch (err: any) {
     console.error('[searchRecipes] Error:', err?.message);
     if (parsed.cuisine) {
-      return filterByCuisine(await searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, mealType: parsed.mealType, count: number }));
+      return filterByCuisine(await searchTheMealDB({ vibe: 'comfort food', cuisineChoice: parsed.cuisine, mealType: parsed.mealType, count: number }), parsed.cuisine);
     }
     return [];
   }
@@ -729,7 +729,7 @@ function parseSpoonacularResult(r: any): SpoonacularRecipe {
 // (from cuisineChipToQuery + parseRecipeQuery). A key mismatch silently routes
 // the lookup to the vibe-category fallback (→ 'Pasta' → Italian dishes), which
 // was the source of the "Mexican filter returns Italian" bug.
-const MEALDB_AREA_MAP: Record<string, string[]> = {
+export const MEALDB_AREA_MAP: Record<string, string[]> = {
   italian:          ['Italian'],
   asian:            ['Chinese', 'Japanese', 'Korean', 'Thai', 'Vietnamese'],
   mexican:          ['Mexican'],
