@@ -207,9 +207,12 @@ function ItemRow({
 // ── Plan → shopping-list sync ───────────────────────────────────────────────
 // A stable localStorage key derived from the week + plan content, so a changed plan
 // yields a new key and re-triggers the auto-sync.
+// Prefix bumped to v2: the old delete-then-bulk bug could write a `shopping-synced-` key
+// on its failure path (marking a plan "synced" when the list was actually emptied). The
+// v2 prefix invalidates those stale keys so every user gets one clean re-sync on deploy.
 function computeSyncKey(weekStart: string, meals: string): string {
   const planHash = meals.length.toString(36) + meals.slice(-12).replace(/\W/g, "");
-  return `shopping-synced-${weekStart}-${planHash}`;
+  return `shopping-synced-v2-${weekStart}-${planHash}`;
 }
 
 type ToastFn = (opts: { title: string; description?: string; variant?: "destructive"; duration?: number }) => void;
