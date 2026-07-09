@@ -6,7 +6,8 @@ import aiRoutes from "./routes/ai";
 import onboardingRoutes from "./routes/onboarding";
 import billingRoutes from "./routes/billing";
 import snacksRoutes from "./routes/snacks";
-import { requireAuth, isSafeUrl } from "./middleware/requireAuth";
+import { requireAuth, isSafeUrl, isPrivateAddress } from "./middleware/requireAuth";
+import { lookup } from "dns/promises";
 import { insertRecipeSchema, insertWeeklyPlanSchema, insertPantryStapleSchema, updateUserTasteProfileSchema, type InsertWeeklyPlan } from "@shared/schema";
 import { guessCategory, guessCuisine } from "./utils/categorization";
 import { detectTags } from "./utils/autoTag";
@@ -210,16 +211,53 @@ export async function registerRoutes(server: Server, app: Express) {
   await storage.seedDefaultData();
 
   // === OG IMAGE PROXY ===
-  // Extracts og:image from a recipe page URL server-side (avoids CORS)
-  app.get("/api/proxy/og-image", async (req, res) => {
+  // Extracts og:image from a recipe page URL server-side (avoids CORS).
+  // SSRF-hardened: requireAuth; string check + resolved-IP check; manual redirects
+  // (3xx rejected, not followed); capped body read; AbortController timeout.
+  app.get("/api/proxy/og-image", requireAuth, async (req, res) => {
     const url = req.query.url as string;
     if (!url || !isSafeUrl(url)) return res.json({ imageUrl: null });
+
+    // Resolve the hostname and reject if ANY resolved address is internal. This catches a
+    // public hostname pointing at a private IP — isSafeUrl only inspects the literal string.
+    try {
+      const { hostname } = new URL(url);
+      const resolved = await lookup(hostname, { all: true });
+      if (resolved.length === 0 || resolved.some(r => isPrivateAddress(r.address))) {
+        return res.json({ imageUrl: null });
+      }
+    } catch {
+      return res.json({ imageUrl: null });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
     try {
       const response = await fetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; SimmerApp/1.0; +https://simmer.app)" },
-        signal: AbortSignal.timeout(6000),
+        redirect: "manual", // don't follow redirects — the target is never re-validated
+        signal: controller.signal,
       });
-      const html = await response.text();
+      // Reject a redirect rather than chasing it to an unvalidated host.
+      if (response.status >= 300 && response.status < 400) return res.json({ imageUrl: null });
+
+      // Read at most ~1 MB from the body stream, stopping past the cap instead of buffering
+      // the whole response, so a huge target can't exhaust memory.
+      const MAX_BYTES = 1_000_000;
+      let html = "";
+      const reader = response.body?.getReader();
+      if (reader) {
+        const decoder = new TextDecoder();
+        let total = 0;
+        while (total < MAX_BYTES) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.length;
+          html += decoder.decode(value, { stream: true });
+        }
+        await reader.cancel().catch(() => {});
+      }
+
       // Try multiple og:image patterns (property or name attribute order varies)
       const match =
         html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
@@ -229,6 +267,8 @@ export async function registerRoutes(server: Server, app: Express) {
       return res.json({ imageUrl });
     } catch {
       return res.json({ imageUrl: null });
+    } finally {
+      clearTimeout(timeout);
     }
   });
 
