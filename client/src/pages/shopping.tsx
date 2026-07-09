@@ -218,9 +218,18 @@ type ToastFn = (opts: { title: string; description?: string; variant?: "destruct
  * Single, safe plan→shopping-list sync. Generates the ingredient list from the plan,
  * then performs ONE atomic server-side swap (POST /api/snacks/shopping/sync-recipe-items),
  * checking res.ok. On success: invalidate the shopping query, success toast, write the
- * sync key. On failure: destructive toast and DO NOT write the key, so the next mount /
- * plan change (or the refresh button) retries. The swap is transactional server-side, so
- * a failure never empties the list. Exported for testing (mock fetch).
+ * sync key. On failure: DO NOT write the key, so the next mount / plan change (or the
+ * refresh button) retries. The swap is transactional server-side, so a failure never
+ * empties the list.
+ *
+ * Guards against a *wrongly* empty sync: if the generate call fails, or if the plan has
+ * filled meal slots but produces zero items (e.g. an AI plan storing recipe names, or an
+ * API hiccup), it aborts WITHOUT syncing the empty set — otherwise it would wipe the
+ * recipe items. A genuinely empty plan (no filled slots) still syncs the empty set, which
+ * is the intentional clear path.
+ *
+ * `trigger` controls how an abort surfaces: "manual" (refresh button) shows a subtle
+ * toast; "auto" (background sync) stays silent (console.warn). Exported for testing.
  */
 export async function syncRecipeItemsToShoppingList(params: {
   planMeals: string | null | undefined;
@@ -228,18 +237,40 @@ export async function syncRecipeItemsToShoppingList(params: {
   syncKey: string | null;
   queryClient: QueryClient;
   toast: ToastFn;
+  trigger: "auto" | "manual";
 }): Promise<{ ok: boolean; count: number }> {
-  const { planMeals, existingItems, syncKey, queryClient, toast } = params;
+  const { planMeals, existingItems, syncKey, queryClient, toast, trigger } = params;
+
+  // Abort: never writes the sync key, so the sync retries on the next mount / plan change.
+  const abort = (reason: string): { ok: boolean; count: number } => {
+    if (trigger === "manual") {
+      toast({
+        title: "Couldn't refresh from your plan",
+        description: "Your list is unchanged.",
+        variant: "destructive",
+      });
+    } else {
+      console.warn(`[shopping sync] aborted (${reason}) — list left unchanged`);
+    }
+    return { ok: false, count: 0 };
+  };
+
   try {
     const meals = planMeals ? JSON.parse(planMeals) : {};
-    const recipeIds = [...new Set(Object.values(meals).filter((v): v is number => typeof v === "number" && !!v))];
+    const filledSlots = Object.values(meals).filter((v) => !!v);
+    const recipeIds = [...new Set(filledSlots.filter((v): v is number => typeof v === "number"))];
+    const planHasMeals = filledSlots.length > 0;
 
-    // Build the recipe-sourced item set. An empty plan → empty array, which atomically
-    // clears recipe items server-side. Manual (non-recipe) items are excluded here so the
+    // Build the recipe-sourced item set. Manual (non-recipe) items are excluded so the
     // server never sees — and never touches — them.
     let newItems: { name: string; amount?: string; category: string }[] = [];
     if (recipeIds.length > 0) {
-      const generated: LegacyList = await apiRequest("POST", "/api/shopping-list", { recipeIds }).then(r => r.json());
+      const genRes = await fetch("/api/shopping-list", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        credentials: "include", body: JSON.stringify({ recipeIds }),
+      });
+      if (!genRes.ok) return abort(`generate ${genRes.status}`);
+      const generated: LegacyList = await genRes.json();
       const manualNames = new Set(existingItems.filter(i => i.source !== "recipe").map(i => i.name.toLowerCase()));
       newItems = Object.entries(generated.categories).flatMap(([cat, catItems]) =>
         (catItems as LegacyItem[])
@@ -247,6 +278,10 @@ export async function syncRecipeItemsToShoppingList(params: {
           .map(item => ({ name: item.name, amount: item.amounts[0] ?? undefined, category: cat }))
       );
     }
+
+    // A plan with filled slots that yields no items is a wrongly-empty generation — don't
+    // wipe the recipe items. Only a genuinely empty plan (no filled slots) syncs empty.
+    if (planHasMeals && newItems.length === 0) return abort("empty generation for a non-empty plan");
 
     const res = await fetch("/api/snacks/shopping/sync-recipe-items", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -321,7 +356,7 @@ export default function ShoppingPage() {
     lastSyncedPlanRef.current = syncKey;
 
     syncRecipeItemsToShoppingList({
-      planMeals: plan.meals, existingItems: items, syncKey, queryClient, toast,
+      planMeals: plan.meals, existingItems: items, syncKey, queryClient, toast, trigger: "auto",
     }).then(result => {
       // On failure the sync key isn't written; clear the in-memory guard too so a later
       // re-render / plan change retries (the refresh button is the manual retry path).
@@ -395,7 +430,7 @@ export default function ShoppingPage() {
     // auto-sync effect uses. Writing syncKey on success stops the effect re-running it.
     lastSyncedPlanRef.current = null;
     await syncRecipeItemsToShoppingList({
-      planMeals: plan.meals, existingItems: items, syncKey, queryClient, toast,
+      planMeals: plan.meals, existingItems: items, syncKey, queryClient, toast, trigger: "manual",
     });
   };
 
