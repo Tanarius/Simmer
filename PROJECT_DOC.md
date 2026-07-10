@@ -215,6 +215,7 @@ See also `CLAUDE.md` at repo root for session-level notes.
 - In-memory AI cache has no max size
 - `type=snack` on Spoonacular is nearly empty â€” use query text instead
 - Auth page invite code field shows on register tab â€” max 8 chars (was old format, invite codes are now 16 chars â€” fix the maxLength)
+- SW Ã— CSP gotcha: `client/public/sw.js` must NOT intercept cross-origin requests. Helmet's CSP (`server/index.ts`, production-only) applies to `/sw.js` too, so any cross-origin `fetch()` re-issued from the worker is governed by `connect-src` (not the page's `img-src https:` allowance) â€” which broke all third-party images (Spoonacular/TheMealDB/blog photos) from the Jun 5 PWA deploy until the SW added an origin check. Keep the `origin !== self.location.origin` early-return, and keep `connect-src` listing every legitimate cross-origin client fetch (currently Sentry ingest).
 
 ---
 

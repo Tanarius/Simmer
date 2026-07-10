@@ -1,6 +1,6 @@
 // Simmer service worker — app shell caching for offline support
 // Bump this version string on every deploy to force cache invalidation.
-const CACHE = "simmer-shell-v2";
+const CACHE = "simmer-shell-v3";
 const SHELL = ["/", "/manifest.json"];
 
 // ── Install: pre-cache app shell ──────────────────────────────────────────
@@ -38,6 +38,13 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
+
+  // Never mediate cross-origin requests (Spoonacular/TheMealDB/blog images, Sentry, etc.).
+  // The worker can't cache them anyway (opaque responses fail the res.ok gate), and re-issuing
+  // the fetch from the worker context makes it subject to connect-src, which the page-level
+  // img-src bypass does not cover — so third-party images 404'd under production CSP. Let the
+  // browser fetch these directly as normal subresources (governed by img-src, which allows https:).
+  if (new URL(request.url).origin !== self.location.origin) return;
 
   const url = new URL(request.url);
 
