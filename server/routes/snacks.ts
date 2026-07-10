@@ -1,8 +1,10 @@
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth";
 import { storage } from "../storage";
 import { guessCategory } from "../utils/categorization";
 import { dedupeShoppingItems } from "../utils/dedupeShoppingItems";
+import { insertShoppingListItemSchema } from "@shared/schema";
 import rateLimit from "express-rate-limit";
 
 const router = Router();
@@ -262,6 +264,36 @@ router.post("/shopping/bulk", requireAuth, bulkRateLimit, async (req, res, next)
     );
     const added = await storage.bulkAddShoppingItems(householdId, userId, enriched);
     res.status(201).json(added);
+  } catch (err) { next(err); }
+});
+
+// Atomic recipe-item sync — replaces ALL source='recipe' items with the supplied set in a
+// single server-side transaction (delete-then-insert). Unlike /bulk this owns the swap
+// atomically, so a failure can never leave the list emptied, and it allows an empty array
+// (an empty plan validly clears recipe items). Manual/wishlist items are never touched.
+// Its own generous cap (300) is safe: it's one authenticated, household-scoped call.
+const syncItemSchema = insertShoppingListItemSchema.pick({
+  name: true, amount: true, unit: true, category: true, sourceId: true,
+});
+const syncRecipeItemsSchema = z.object({ items: z.array(syncItemSchema).max(300) });
+
+router.post("/shopping/sync-recipe-items", requireAuth, bulkRateLimit, async (req, res, next) => {
+  try {
+    const householdId = (req.user as any).householdId;
+    const userId = (req.user as any).id;
+    const parsed = syncRecipeItemsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    const enriched = dedupeShoppingItems(
+      parsed.data.items.map(i => ({
+        name: i.name,
+        amount: i.amount ?? undefined,
+        unit: i.unit ?? undefined,
+        category: i.category ?? guessCategory(i.name),
+        sourceId: i.sourceId ?? undefined,
+      }))
+    );
+    const synced = await storage.syncRecipeShoppingItems(householdId, userId, enriched);
+    res.status(200).json({ count: synced.length, items: synced });
   } catch (err) { next(err); }
 });
 

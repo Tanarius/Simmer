@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { WeeklyPlan } from "@shared/schema";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { computeSyncKey, syncRecipeItemsToShoppingList } from "@/lib/shoppingSync";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -30,8 +31,6 @@ interface PersistentItem {
   productData: string | null;
 }
 
-interface LegacyItem { name: string; amounts: string[]; isStaple: boolean; }
-interface LegacyList { totalItems: number; recipeCount: number; categories: Record<string, LegacyItem[]>; }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -204,6 +203,9 @@ function ItemRow({
   );
 }
 
+// Plan → shopping-list sync (computeSyncKey + syncRecipeItemsToShoppingList) lives in
+// @/lib/shoppingSync so it can be unit-tested without a DOM/React test environment.
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ShoppingPage() {
@@ -241,58 +243,25 @@ export default function ShoppingPage() {
     queryKey: ["/api/plans", weekStart],
   });
 
-  // ── Auto-sync from plan whenever plan changes (additive only) ────────────
-  // Key includes a hash of the plan's meals so a new recipe addition triggers a new sync.
+  // ── Auto-sync from plan whenever plan changes ────────────────────────────────
+  // Delegates to the shared, atomic syncRecipeItemsToShoppingList. The localStorage key
+  // (keyed on week + plan content) ensures each distinct plan state syncs once.
   useEffect(() => {
     if (!plan?.meals || items === undefined) return;
 
-    // Build a stable key from week + plan content so a changed plan = new key = new sync
-    const planHash = plan.meals.length.toString(36) + plan.meals.slice(-12).replace(/\W/g, "");
-    const syncKey = `shopping-synced-${weekStart}-${planHash}`;
-
+    const syncKey = computeSyncKey(weekStart, plan.meals);
     if (lastSyncedPlanRef.current === syncKey) return; // already ran for this exact plan state
     if (localStorage.getItem(syncKey)) { lastSyncedPlanRef.current = syncKey; return; }
 
     lastSyncedPlanRef.current = syncKey;
 
-    const doSync = async () => {
-      try {
-        const meals = JSON.parse(plan.meals);
-        const recipeIds = [...new Set(Object.values(meals).filter((v): v is number => typeof v === "number" && !!v))];
-
-        // Full reconciliation: clear all recipe-sourced items then re-add from current plan.
-        // This handles both additions AND removals without a manual sync button click.
-        await fetch("/api/snacks/shopping?source=recipe", { method: "DELETE", credentials: "include" });
-
-        localStorage.setItem(syncKey, "1");
-
-        if (recipeIds.length === 0) {
-          queryClient.invalidateQueries({ queryKey: ["/api/snacks/shopping"] });
-          return;
-        }
-
-        const generated: LegacyList = await apiRequest("POST", "/api/shopping-list", { recipeIds }).then(r => r.json());
-
-        // Only skip items the user added manually (non-recipe source)
-        const manualNames = new Set(items.filter(i => i.source !== "recipe").map(i => i.name.toLowerCase()));
-        const newItems = Object.entries(generated.categories).flatMap(([cat, catItems]) =>
-          (catItems as LegacyItem[])
-            .filter(item => !manualNames.has(item.name.toLowerCase()))
-            .map(item => ({ name: item.name, amount: item.amounts[0] ?? undefined, category: cat, source: "recipe" }))
-        );
-
-        if (newItems.length > 0) {
-          await fetch("/api/snacks/shopping/bulk", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            credentials: "include", body: JSON.stringify({ items: newItems }),
-          });
-          toast({ title: `Shopping list synced from plan`, duration: 3000 });
-        }
-        queryClient.invalidateQueries({ queryKey: ["/api/snacks/shopping"] });
-      } catch { /* silent */ }
-    };
-
-    doSync();
+    syncRecipeItemsToShoppingList({
+      planMeals: plan.meals, existingItems: items, syncKey, queryClient, toast, trigger: "auto",
+    }).then(result => {
+      // On failure the sync key isn't written; clear the in-memory guard too so a later
+      // re-render / plan change retries (the refresh button is the manual retry path).
+      if (!result.ok) lastSyncedPlanRef.current = null;
+    });
   }, [plan?.meals, items, weekStart, queryClient, toast]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -353,48 +322,16 @@ export default function ShoppingPage() {
     },
   });
 
-  // ── Manual re-sync (full reconcile: clears recipe items + re-adds) ────────
+  // ── Manual re-sync (refresh button) — safe retry of the atomic plan sync ──────
   const manualSync = async () => {
     if (!plan?.meals) { toast({ title: "No plan this week" }); return; }
-    try {
-      const meals = JSON.parse(plan.meals);
-      const recipeIds = [...new Set(Object.values(meals).filter((v): v is number => typeof v === "number" && !!v))];
-
-      // Step 1: clear all previously-synced recipe items from the list
-      await fetch("/api/snacks/shopping?source=recipe", { method: "DELETE", credentials: "include" });
-
-      if (!recipeIds.length) {
-        queryClient.invalidateQueries({ queryKey: ["/api/snacks/shopping"] });
-        lastSyncedPlanRef.current = null;
-        toast({ title: "Shopping list cleared of recipe items — no recipes in plan" });
-        return;
-      }
-
-      // Step 2: generate fresh ingredient list from plan
-      const generated: LegacyList = await apiRequest("POST", "/api/shopping-list", { recipeIds }).then(r => r.json());
-
-      // Step 3: skip items already in the list as manual adds (non-recipe source)
-      const manualNames = new Set(
-        items.filter(i => i.source !== "recipe").map(i => i.name.toLowerCase())
-      );
-      const newItems = Object.entries(generated.categories).flatMap(([cat, catItems]) =>
-        (catItems as LegacyItem[])
-          .filter(item => !manualNames.has(item.name.toLowerCase()))
-          .map(item => ({ name: item.name, amount: item.amounts[0], category: cat, source: "recipe" }))
-      );
-
-      if (newItems.length > 0) {
-        await fetch("/api/snacks/shopping/bulk", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          credentials: "include", body: JSON.stringify({ items: newItems }),
-        });
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["/api/snacks/shopping"] });
-      // Reset the plan hash ref so auto-sync re-evaluates on next render
-      lastSyncedPlanRef.current = null;
-      toast({ title: `Shopping list synced with plan (${newItems.length} items)` });
-    } catch (e: any) { toast({ title: "Sync failed", description: e.message, variant: "destructive" }); }
+    const syncKey = computeSyncKey(weekStart, plan.meals);
+    // Act as a fresh retry: clear the in-memory guard, then run the same atomic sync the
+    // auto-sync effect uses. Writing syncKey on success stops the effect re-running it.
+    lastSyncedPlanRef.current = null;
+    await syncRecipeItemsToShoppingList({
+      planMeals: plan.meals, existingItems: items, syncKey, queryClient, toast, trigger: "manual",
+    });
   };
 
   // ── Export ─────────────────────────────────────────────────────────────────

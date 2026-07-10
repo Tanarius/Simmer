@@ -207,6 +207,13 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertRecipeSchema = createInsertSchema(recipes).omit({ id: true, householdId: true });
 export const insertWeeklyPlanSchema = createInsertSchema(weeklyPlans).omit({ id: true, householdId: true });
 export const insertPantryStapleSchema = createInsertSchema(pantryStaples).omit({ id: true, householdId: true });
+// Client-facing shape for a shopping-list item. householdId/addedBy and all check/timestamp
+// columns are server-controlled, so they're omitted. `source` is accepted but the
+// recipe-sync endpoint forces it to "recipe" regardless.
+export const insertShoppingListItemSchema = createInsertSchema(shoppingListItems).omit({
+  id: true, householdId: true, addedBy: true,
+  checked: true, checkedBy: true, checkedAt: true, createdAt: true,
+});
 export const updateUserTasteProfileSchema = createInsertSchema(userTasteProfile)
   .omit({ id: true, userId: true, derivedFrom: true, lastUpdated: true, cuisineSignals: true })
   .partial();

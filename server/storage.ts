@@ -125,6 +125,7 @@ export interface IStorage {
   getShoppingList(householdId: number): Promise<ShoppingListItem[]>;
   addShoppingItem(householdId: number, userId: number, item: { name: string; amount?: string; unit?: string; category?: string; source?: string; sourceId?: number; productData?: string }): Promise<ShoppingListItem>;
   bulkAddShoppingItems(householdId: number, userId: number, items: { name: string; amount?: string; unit?: string; category?: string; source?: string; sourceId?: number }[]): Promise<ShoppingListItem[]>;
+  syncRecipeShoppingItems(householdId: number, userId: number, items: { name: string; amount?: string; unit?: string; category?: string; sourceId?: number }[]): Promise<ShoppingListItem[]>;
   toggleShoppingItem(id: number, householdId: number, userId: number, checked: boolean): Promise<ShoppingListItem | undefined>;
   deleteShoppingItem(id: number, householdId: number): Promise<void>;
   clearCheckedShoppingItems(householdId: number): Promise<void>;
@@ -823,6 +824,32 @@ export class DatabaseStorage implements IStorage {
     await db.delete(shoppingListItems).where(
       and(eq(shoppingListItems.householdId, householdId), eq(shoppingListItems.source, "recipe"))
     );
+  }
+
+  async syncRecipeShoppingItems(householdId: number, userId: number, items: { name: string; amount?: string; unit?: string; category?: string; sourceId?: number }[]): Promise<ShoppingListItem[]> {
+    // Atomic swap: delete the household's existing recipe-sourced items and insert the
+    // new set in a single transaction, so a mid-operation failure can never leave the
+    // list emptied. Manual/wishlist items (source != 'recipe') are never touched.
+    // Mirrors the transactional deleteUserData pattern.
+    return await db.transaction(async (tx) => {
+      await tx.delete(shoppingListItems).where(
+        and(eq(shoppingListItems.householdId, householdId), eq(shoppingListItems.source, "recipe"))
+      );
+      if (items.length === 0) return [];
+      const rows = await tx.insert(shoppingListItems).values(
+        items.map(item => ({
+          householdId,
+          addedBy: userId,
+          name: item.name,
+          amount: item.amount ?? null,
+          unit: item.unit ?? null,
+          category: item.category ?? "other",
+          source: "recipe",
+          sourceId: item.sourceId ?? null,
+        }))
+      ).returning();
+      return rows;
+    });
   }
 
   async updateShoppingItemProduct(id: number, householdId: number, productData: string, imageUrl?: string): Promise<void> {
