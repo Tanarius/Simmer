@@ -61,6 +61,15 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         baseUri: ["'self'"],
+        // Explicit connect-src so client-side XHR/fetch/beacon aren't left to the
+        // default-src 'self' fallback. Sentry's browser SDK (error/tracing/replay) POSTs
+        // events to its ingest host; without this they're blocked in production.
+        connectSrc: [
+          "'self'",
+          "https://*.ingest.sentry.io",
+          "https://*.ingest.us.sentry.io",
+          "https://*.ingest.de.sentry.io",
+        ],
         fontSrc: ["'self'", "https:", "data:"],
         formAction: ["'self'"],
         frameAncestors: ["'self'"],
