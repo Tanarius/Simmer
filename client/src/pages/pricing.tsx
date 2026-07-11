@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Check, Sparkles, Zap, Utensils, CalendarDays, ShoppingCart } from "lucide-react";
+import { Check, Sparkles, Zap, Utensils, CalendarDays, ShoppingCart, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
@@ -28,7 +28,7 @@ export default function PricingPage() {
             Smarter planning for your household
           </h1>
           <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto">
-            Get intelligent recipe suggestions, optimize your grocery trips, and automate your week with Simmer's AI-powered features.
+            Get intelligent recipe suggestions, optimize your grocery trips, and automate your week with Simmer.
           </p>
         </div>
       </div>
@@ -49,7 +49,8 @@ export default function PricingPage() {
             </div>
             <ul className="space-y-4 mb-8 flex-1">
               {[
-                { label: "10 AI requests per day", icon: <Zap className="w-5 h-5 text-gray-400" /> },
+                { label: "10 suggestions / day", icon: <Zap className="w-5 h-5 text-gray-400" /> },
+                { label: "30 assistant messages / day", icon: <MessageSquare className="w-5 h-5 text-gray-400" /> },
                 { label: "Shared household pantry", icon: <Utensils className="w-5 h-5 text-gray-400" /> },
                 { label: "Manual weekly planner", icon: <CalendarDays className="w-5 h-5 text-gray-400" /> },
                 { label: "Basic shopping list", icon: <ShoppingCart className="w-5 h-5 text-gray-400" /> },
@@ -79,7 +80,7 @@ export default function PricingPage() {
             </div>
             <div className="mb-8">
               <h3 className="text-2xl font-bold text-white mb-2">Premium</h3>
-              <p className="text-orange-200">The ultimate AI meal planning assistant.</p>
+              <p className="text-orange-200">The ultimate meal planning assistant.</p>
               <div className="mt-6 flex items-baseline gap-1">
                 <span className="text-5xl font-extrabold tracking-tight text-white">$4.99</span>
                 <span className="text-orange-300/60 font-medium">/month</span>
@@ -87,9 +88,9 @@ export default function PricingPage() {
             </div>
             <ul className="space-y-4 mb-8 flex-1">
               {[
-                { label: "Unlimited AI requests", icon: <Sparkles className="w-5 h-5 text-orange-400" /> },
+                { label: "Unlimited suggestions & assistant messages", icon: <Sparkles className="w-5 h-5 text-orange-400" /> },
                 { label: "Generate 1-click weekly plans", icon: <Sparkles className="w-5 h-5 text-orange-400" /> },
-                { label: "AI auto-categorized groceries", icon: <Sparkles className="w-5 h-5 text-orange-400" /> },
+                { label: "Auto-categorized groceries", icon: <Sparkles className="w-5 h-5 text-orange-400" /> },
                 { label: "Nutrition & macros data", icon: <Check className="w-5 h-5 text-orange-400" /> },
                 { label: "Priority recipe suggestions", icon: <Check className="w-5 h-5 text-orange-400" /> },
               ].map((feat, i) => (

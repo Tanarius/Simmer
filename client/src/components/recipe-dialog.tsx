@@ -886,7 +886,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                       {isSocialImporting ? (
                         <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Reading recipe...</>
                       ) : (
-                        <><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Extract Recipe with AI</>
+                        <><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Extract Recipe with Simmer</>
                       )}
                     </Button>
                   </div>
@@ -935,7 +935,7 @@ export function AddRecipeDialog({ open, onClose }: AddRecipeDialogProps) {
                       }}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Take a screenshot of an Instagram or TikTok recipe post and upload it. AI will extract the recipe automatically.
+                      Take a screenshot of an Instagram or TikTok recipe post and upload it. Simmer will extract the recipe automatically.
                     </p>
                   </div>
                 )}

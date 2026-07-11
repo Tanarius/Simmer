@@ -38,7 +38,7 @@ export async function aiRateLimit(req: Request, res: Response, next: NextFunctio
     const limit = usage.subscriptionTier === 'test' ? TEST_TIER_DAILY_LIMIT : FREE_TIER_DAILY_LIMIT;
     if (usage.subscriptionTier !== 'premium' && usage.aiCallsToday >= limit) {
       return res.status(429).json({
-        error: "Daily AI limit reached",
+        error: "Daily assistant limit reached",
         upgradePrompt: true,
         callsUsed: usage.aiCallsToday,
         callsLimit: limit
@@ -49,7 +49,7 @@ export async function aiRateLimit(req: Request, res: Response, next: NextFunctio
     next();
   } catch (error) {
     console.error("Rate limit check failed:", error);
-    res.status(500).json({ error: "Failed to verify AI usage limits" });
+    res.status(500).json({ error: "Failed to verify assistant usage limits" });
   }
 }
 

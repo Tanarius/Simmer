@@ -404,7 +404,7 @@ router.post("/weekly-plan", async (req, res, next) => {
     ]);
 
     if (recipes.length === 0) {
-      return res.status(400).json({ error: "Add some recipes to your library first, then generate an AI plan." });
+      return res.status(400).json({ error: "Add some recipes to your library first, then let Simmer plan your week." });
     }
 
     const cookingStyles: string[] = (userPrefs as any)?.cookingStyles ?? [];
@@ -575,7 +575,7 @@ router.post("/import-from-social", aiRateLimit, async (req, res, next) => {
 
     const textBlock = msg.content.find((b) => b.type === "text") as any;
     if (!textBlock?.text) {
-      return res.status(422).json({ error: "No response from AI" });
+      return res.status(422).json({ error: "No response from the assistant" });
     }
 
     let raw = textBlock.text.trim();
@@ -585,7 +585,7 @@ router.post("/import-from-social", aiRateLimit, async (req, res, next) => {
     try {
       parsed = JSON.parse(raw);
     } catch {
-      return res.status(422).json({ error: "Could not parse AI response as JSON" });
+      return res.status(422).json({ error: "Could not parse the assistant's response" });
     }
 
     if (parsed.error) {

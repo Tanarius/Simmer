@@ -13,7 +13,7 @@ export function AILimitModal({
     <UpgradeModal
       open={open}
       onClose={() => onOpenChange(false)}
-      reason={reason ?? "You've reached your daily AI limit."}
+      reason={reason ?? "You've reached your daily assistant limit."}
     />
   );
 }

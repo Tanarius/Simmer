@@ -216,7 +216,7 @@ export default function ProfilePage() {
   // Detect ?upgraded=true after Stripe Checkout redirect
   useEffect(() => {
     if (window.location.hash.includes("upgraded=true")) {
-      toast({ title: "Welcome to Premium!", description: "Your household now has unlimited AI access." });
+      toast({ title: "Welcome to Premium!", description: "Your household now has unlimited assistant access." });
       // Clean the URL
       window.history.replaceState(null, "", window.location.pathname + "#/profile");
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
@@ -560,10 +560,10 @@ export default function ProfilePage() {
           <Section
             icon={<Sparkles className="h-4 w-4 text-orange-400" />}
             title="Cuisine Preferences"
-            subtitle="Influences AI recipe suggestions"
+            subtitle="Influences Simmer's recipe suggestions"
           >
             <div className="pt-4">
-              <p className="text-xs text-muted-foreground mb-3">Toggle cuisines you enjoy — the AI prioritises these when planning meals.</p>
+              <p className="text-xs text-muted-foreground mb-3">Toggle cuisines you enjoy — Simmer prioritises these when planning meals.</p>
               <div className="flex flex-wrap gap-2">
                 {CUISINES.map(({ key, label, emoji }) => {
                   const isLiked = profile?.likedCuisines?.includes(key);
@@ -590,7 +590,7 @@ export default function ProfilePage() {
           {/* ── AI Constraints ───────────────────────── */}
           <Section
             icon={<Settings className="h-4 w-4 text-blue-400" />}
-            title="AI Constraints"
+            title="Cooking Preferences"
             subtitle="Controls how recipes are generated"
             defaultOpen={false}
           >
@@ -598,7 +598,7 @@ export default function ProfilePage() {
               <div className="flex flex-col sm:flex-row justify-between gap-4 sm:items-center">
                 <div>
                   <Label>Complexity target</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">What difficulty level should AI aim for?</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">What difficulty level should Simmer aim for?</p>
                 </div>
                 <Select
                   value={profile?.complexityPreference ?? "medium"}
@@ -626,7 +626,7 @@ export default function ProfilePage() {
           >
             <div className="pt-4 space-y-3">
               <p className="text-xs text-muted-foreground">
-                The AI automatically flags and substitutes these in suggestions.
+                Simmer automatically flags and substitutes these in suggestions.
               </p>
 
               {avoided.length > 0 && (
@@ -707,7 +707,7 @@ export default function ProfilePage() {
           <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex gap-3 items-start">
             <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <p className="text-xs text-foreground/70 leading-relaxed">
-              <strong>How the AI uses your preferences:</strong> Every suggestion from the Kitchen Copilot and Weekly Planner respects your cuisine preferences, complexity target, and dietary restrictions — ingredients are flagged and silently substituted in generated recipes.
+              <strong>How Simmer uses your preferences:</strong> Every suggestion from the Kitchen Copilot and Weekly Planner respects your cuisine preferences, complexity target, and dietary restrictions — ingredients are flagged and silently substituted in suggestions.
             </p>
           </div>
 
