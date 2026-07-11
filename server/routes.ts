@@ -234,7 +234,7 @@ export async function registerRoutes(server: Server, app: Express) {
     const timeout = setTimeout(() => controller.abort(), 6000);
     try {
       const response = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; SimmerApp/1.0; +https://simmer.app)" },
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SimmerApp/1.0; +https://simmer.kitchen)" },
         redirect: "manual", // don't follow redirects — the target is never re-validated
         signal: controller.signal,
       });

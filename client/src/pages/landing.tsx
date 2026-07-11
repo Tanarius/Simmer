@@ -62,16 +62,6 @@ function PlanCard() {
   );
 }
 
-function ChefCard() {
-  return (
-    <div className="hero-card" style={{ "--rot": "-5deg", "--dur": "10s", "--delay": "3s", bottom: "20%", right: "2.5%" } as React.CSSProperties}>
-      <div style={{ fontSize: 11, color: "#C96A3A", fontWeight: 700, marginBottom: 6 }}>✨ Chef Mode</div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: "#F5EDE3", marginBottom: 4 }}>Garlic Butter Chicken</div>
-      <div style={{ fontSize: 10, color: "#9A8A7A" }}>Uses 4 pantry items</div>
-    </div>
-  );
-}
-
 // ─── App UI mocks ──────────────────────────────────────────────────────────
 
 function PlannerMock() {
@@ -107,33 +97,6 @@ function PlannerMock() {
       </div>
       <div style={{ marginTop: 14, padding: "8px 10px", background: "#1C1410", borderRadius: 8, fontSize: 11, color: "#9A8A7A" }}>
         🛒 <span style={{ color: "#C96A3A", fontWeight: 600 }}>23 items</span> added to shopping list
-      </div>
-    </div>
-  );
-}
-
-function ChefModeMock() {
-  const tags: Array<{ label: string; bg: string; color: string }> = [
-    { label: "🥕 Carrots",   bg: "rgba(234,88,12,0.15)",   color: "#F97316" },
-    { label: "🧅 Onions",    bg: "rgba(139,92,246,0.15)",  color: "#A78BFA" },
-    { label: "🍗 Chicken",   bg: "rgba(201,106,58,0.15)",  color: "#C96A3A" },
-    { label: "🧄 Garlic",    bg: "rgba(234,179,8,0.15)",   color: "#CA8A04" },
-    { label: "🫒 Olive oil", bg: "rgba(61,90,71,0.2)",     color: "#3D8A5A" },
-  ];
-  return (
-    <div style={{ background: "#2A1F18", borderRadius: 14, padding: 20, border: "1px solid #3A2A20", boxShadow: "inset 0 2px 12px rgba(0,0,0,0.2)" }}>
-      <div style={{ fontSize: 12, color: "#9A8A7A", marginBottom: 10, fontWeight: 600 }}>In your pantry</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-        {tags.map(({ label, bg, color }) => (
-          <span key={label} style={{ background: bg, border: `1px solid ${color}33`, borderRadius: 20, padding: "4px 10px", fontSize: 11, color }}>{label}</span>
-        ))}
-      </div>
-      <div style={{ background: "linear-gradient(135deg, rgba(201,106,58,0.12), rgba(61,90,71,0.12))", borderRadius: 10, padding: 14, borderLeft: "3px solid #C96A3A", border: "1px solid rgba(201,106,58,0.2)" }}>
-        <div style={{ fontSize: 11, color: "#C96A3A", marginBottom: 6, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-          <span className="sparkle-icon">✨</span> Simmer Suggestion
-        </div>
-        <div style={{ fontSize: 14, color: "#F5EDE3", fontWeight: 700 }}>Garlic Butter Chicken</div>
-        <div style={{ fontSize: 11, color: "#9A8A7A", marginTop: 4 }}>30 min · Uses 4 pantry items · No extra shopping</div>
       </div>
     </div>
   );
@@ -193,13 +156,6 @@ export default function LandingPage() {
       mock: <PlannerMock />, mockFirst: true,
     },
     {
-      tag: "✨ Chef Mode",
-      tagColor: "#C96A3A", tagBg: "rgba(201,106,58,0.12)",
-      heading: "Tell us what's in your fridge",
-      body: "Simmer looks at your pantry and suggests meals you can actually make tonight — no extra shopping required.",
-      mock: <ChefModeMock />, mockFirst: false,
-    },
-    {
       tag: "👨‍👩‍👧‍👦 Household accounts",
       tagColor: "#3D8A5A", tagBg: "rgba(61,90,71,0.15)",
       heading: "Built for whoever's at your table",
@@ -221,7 +177,6 @@ export default function LandingPage() {
     "Everything in Free",
     "Unlimited suggestions",
     "Unlimited assistant messages",
-    "Chef Mode — pantry-based meals",
     "Priority support",
     "Early access to new features",
   ];
@@ -347,7 +302,6 @@ export default function LandingPage() {
           <RecipeCard />
           <ShoppingCard />
           <PlanCard />
-          <ChefCard />
 
           <div style={{ textAlign: "center", maxWidth: 660, padding: "0 24px", position: "relative", zIndex: 1 }}>
             <div className="fade-in-up" style={{
