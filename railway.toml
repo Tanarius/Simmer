@@ -15,7 +15,7 @@ restartPolicyMaxRetries = 3
 #   DATABASE_URL          Neon PostgreSQL connection string
 #   SESSION_SECRET        Random secret for express-session (min 32 chars)
 #   ANTHROPIC_API_KEY     Claude AI — powers Copilot and recipe features
-#   CLIENT_URL            Full public URL of this app, e.g. https://simmer.app
+#   CLIENT_URL            Full public URL of this app, e.g. https://simmer.kitchen
 #                         Used for Stripe redirect URLs. App crashes without this.
 #
 # REQUIRED FOR BILLING (soft-warn on start if missing, Stripe routes will fail)
