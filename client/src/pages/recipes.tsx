@@ -244,7 +244,7 @@ export default function RecipesPage() {
             </div>
             <div>
               <p className="text-base font-semibold">Your recipe library is empty</p>
-              <p className="text-sm text-muted-foreground mt-1">Add recipes manually or let AI find them for you</p>
+              <p className="text-sm text-muted-foreground mt-1">Add recipes manually or let Simmer find them for you</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <button

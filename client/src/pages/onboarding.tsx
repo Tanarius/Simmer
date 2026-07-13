@@ -123,7 +123,7 @@ export default function OnboardingPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/state"] });
       setLocation("/");
       if (!skip) {
-        toast({ title: "You're all set!", description: "Preferences saved — the AI will personalise your plan." });
+        toast({ title: "You're all set!", description: "Preferences saved — Simmer will personalise your plan." });
       }
     } catch {
       toast({ description: "Failed to save preferences", variant: "destructive" });

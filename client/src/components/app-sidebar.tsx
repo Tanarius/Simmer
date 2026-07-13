@@ -147,10 +147,10 @@ export function AppSidebar() {
             {/* Usage row */}
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1 bg-muted rounded-full px-2 py-0.5 font-mono tabular-nums">
-                AI {user.aiCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 10}
+                Suggestions {user.aiCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 10}
               </span>
               <span className="inline-flex items-center gap-1 bg-muted rounded-full px-2 py-0.5 font-mono tabular-nums">
-                Chat {user.copilotCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 30}
+                Messages {user.copilotCallsToday ?? 0}/{user.subscriptionTier === 'test' ? 50 : user.subscriptionTier === 'premium' ? '∞' : 30}
               </span>
             </div>
           </>

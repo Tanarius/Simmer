@@ -435,7 +435,7 @@ export default function ShoppingPage() {
                     : <Sparkles className="h-4 w-4" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>AI optimize (remove dupes, sort by aisle)</TooltipContent>
+              <TooltipContent>Optimize list (remove dupes, sort by aisle)</TooltipContent>
             </Tooltip>
             {/* Re-sync from plan */}
             <Tooltip>

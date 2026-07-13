@@ -41,8 +41,8 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
       setOpen(false);
       onPlanGenerated(data.meals);
       toast({
-        title: "AI Plan Ready",
-        description: `Filled your week from your recipe library. ${data.callsRemaining !== 9999 ? `(${data.callsRemaining} AI calls remaining today)` : ''}`,
+        title: "Simmer filled your week",
+        description: `Filled your week from your recipe library. ${data.callsRemaining !== 9999 ? `(${data.callsRemaining} suggestions left today)` : ''}`,
       });
     },
     onError: (err: any) => {
@@ -72,7 +72,7 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
         <DialogTrigger asChild>
           <Button className="bg-[#C96A3A] hover:bg-[#A85530] text-white shadow-md">
             <Sparkles className="w-4 h-4 mr-2" />
-            Generate AI Plan
+            Fill My Week
           </Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-md">
@@ -82,7 +82,7 @@ export function WeeklyPlanAI({ onPlanGenerated }: { onPlanGenerated: (plan: any)
               Configure Week
             </DialogTitle>
             <DialogDescription>
-              Mark your busy days below. The AI will suggest quicker recipes (under 30 minutes) for those days.
+              Mark your busy days below. Simmer will suggest quicker recipes (under 30 minutes) for those days.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

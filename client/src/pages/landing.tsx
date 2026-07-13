@@ -130,7 +130,7 @@ function ChefModeMock() {
       </div>
       <div style={{ background: "linear-gradient(135deg, rgba(201,106,58,0.12), rgba(61,90,71,0.12))", borderRadius: 10, padding: 14, borderLeft: "3px solid #C96A3A", border: "1px solid rgba(201,106,58,0.2)" }}>
         <div style={{ fontSize: 11, color: "#C96A3A", marginBottom: 6, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-          <span className="sparkle-icon">✨</span> AI Suggestion
+          <span className="sparkle-icon">✨</span> Simmer Suggestion
         </div>
         <div style={{ fontSize: 14, color: "#F5EDE3", fontWeight: 700 }}>Garlic Butter Chicken</div>
         <div style={{ fontSize: 11, color: "#9A8A7A", marginTop: 4 }}>30 min · Uses 4 pantry items · No extra shopping</div>
@@ -186,7 +186,7 @@ export default function LandingPage() {
     mock: React.ReactNode; mockFirst: boolean;
   }> = [
     {
-      tag: "✨ AI-powered",
+      tag: "✨ Built-in assistant",
       tagColor: "#C96A3A", tagBg: "rgba(201,106,58,0.12)",
       heading: "Your whole week, planned in minutes",
       body: "Drag, drop, done. Build your meal week visually and let Simmer generate your shopping list automatically.",
@@ -196,7 +196,7 @@ export default function LandingPage() {
       tag: "✨ Chef Mode",
       tagColor: "#C96A3A", tagBg: "rgba(201,106,58,0.12)",
       heading: "Tell us what's in your fridge",
-      body: "Simmer's AI looks at your pantry and suggests meals you can actually make tonight — no extra shopping required.",
+      body: "Simmer looks at your pantry and suggests meals you can actually make tonight — no extra shopping required.",
       mock: <ChefModeMock />, mockFirst: false,
     },
     {
@@ -213,15 +213,15 @@ export default function LandingPage() {
     "Recipe library (unlimited)",
     "Shopping list generation",
     "Household sharing",
-    "10 AI suggestions / day",
-    "30 Copilot messages / day",
+    "10 suggestions / day",
+    "30 assistant messages / day",
   ];
 
   const proFeatures = [
     "Everything in Free",
-    "Unlimited AI suggestions",
-    "Unlimited Copilot",
-    "Chef Mode — pantry-based AI meals",
+    "Unlimited suggestions",
+    "Unlimited assistant messages",
+    "Chef Mode — pantry-based meals",
     "Priority support",
     "Early access to new features",
   ];
@@ -591,6 +591,9 @@ export default function LandingPage() {
             <a href="/#/pricing" className="lp-footer-link">Pricing</a>
           </div>
           <div>© 2026 Simmer</div>
+          <div style={{ flexBasis: "100%", textAlign: "center", fontSize: 12, color: "#5A4A3A", opacity: 0.85 }}>
+            Simmer's assistant is powered by AI.
+          </div>
         </footer>
 
       </div>

@@ -290,7 +290,7 @@ function DroppableSlot({ slotKey, label, mealValue, recipes, onSet, onClear, isP
               )}
             </div>
           ) : (
-            <span className="text-[10px] px-1.5 py-px rounded-full w-fit bg-orange-500/20 text-orange-600 dark:text-orange-300 font-medium">AI</span>
+            <span className="text-[10px] px-1.5 py-px rounded-full w-fit bg-orange-500/20 text-orange-600 dark:text-orange-300 font-medium">Suggested</span>
           )}
           <p className="text-foreground text-xs font-semibold leading-snug line-clamp-2">{recipe ? recipe.name : aiName}</p>
           {recipe && total > 0 && (

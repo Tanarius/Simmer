@@ -30,7 +30,7 @@ export function ShoppingListOptimizer({
       onOptimized(data.optimizedList);
       toast({
         title: "List Optimized",
-        description: `Removed pantry duplicates and organized by aisle ${data.callsRemaining !== 9999 ? `(${data.callsRemaining} AI calls remaining today)` : ''}`,
+        description: `Removed pantry duplicates and organized by aisle ${data.callsRemaining !== 9999 ? `(${data.callsRemaining} suggestions left today)` : ''}`,
       });
     },
     onError: (err: any) => {
@@ -53,7 +53,7 @@ export function ShoppingListOptimizer({
         {optMutation.isPending ? (
           <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Optimizing...</>
         ) : (
-          <><Sparkles className="w-4 h-4 mr-2" /> Optimize List with AI</>
+          <><Sparkles className="w-4 h-4 mr-2" /> Optimize List with Simmer</>
         )}
       </Button>
       <AILimitModal open={showLimitModal} onOpenChange={setShowLimitModal} />

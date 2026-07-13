@@ -104,18 +104,18 @@ async function executeClaudeCall(system: string, user: string, maxTokens = 1500)
     console.error("Anthropic Call Error:", err?.status, err?.message, err?.error);
     // Surface auth/quota errors as non-500 so the client sees a useful message
     if (err.status === 401) {
-      const e: any = new Error("AI service authentication failed â€” check ANTHROPIC_API_KEY");
+      const e: any = new Error("Assistant service authentication failed â€” check ANTHROPIC_API_KEY");
       e.status = 503;
       throw e;
     }
     if (err.status === 429) {
-      const e: any = new Error("AI rate limit reached â€” try again later");
+      const e: any = new Error("Simmer's assistant is busy, try again in a moment");
       e.status = 429;
       throw e;
     }
     // Already has a status (our own errors)
     if (err.status) throw err;
-    throw new Error("Failed to process AI response: " + err.message);
+    throw new Error("Failed to process assistant response: " + err.message);
   }
 }
 

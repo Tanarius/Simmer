@@ -284,7 +284,7 @@ export default function HomePage() {
     if (prevRecipeCount.current === null) { prevRecipeCount.current = count; return; }
     if (count > prevRecipeCount.current) {
       if (count === 1) toast({ description: "🎉 First recipe saved! Now plan your week." });
-      else if (count === 5) toast({ description: "Nice collection! Try Generate AI Plan to fill your week." });
+      else if (count === 5) toast({ description: "Nice collection! Try Fill My Week to plan your week." });
       else if (count === 10) toast({ description: "Your library is growing! Time to let Chef Mode cook." });
     }
     prevRecipeCount.current = count;
@@ -323,7 +323,7 @@ export default function HomePage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {([
                       { icon: "🔍", title: "Find your first recipe", desc: "Search millions of recipes by cuisine, diet, or ingredient.", href: "/recipes" },
-                      { icon: "📱", title: "Import from Instagram", desc: "Paste a caption or screenshot — AI extracts the recipe.", href: "/recipes" },
+                      { icon: "📱", title: "Import from Instagram", desc: "Paste a caption or screenshot — Simmer extracts the recipe.", href: "/recipes" },
                       { icon: "✏️", title: "Add a recipe manually", desc: "Build your own recipe from scratch.", href: "/recipes" },
                     ] as const).map(({ icon, title, desc, href }) => (
                       <button

@@ -25,7 +25,7 @@ export function PantryChef() {
       setSuggestions(data.recipes);
       toast({
         title: "Chef's Suggestions Ready!",
-        description: `Found ${data.recipes.length} ideas. (${data.callsRemaining} AI calls remaining)`,
+        description: `Found ${data.recipes.length} ideas. (${data.callsRemaining} suggestions left today)`,
       });
     },
     onError: (err: any) => {
@@ -63,9 +63,9 @@ export function PantryChef() {
         <div>
           <h2 className="text-lg font-bold text-orange-100 flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-orange-400" />
-            Pantry Chef
+            Chef Mode
           </h2>
-          <p className="text-sm text-orange-200/70 mt-1">Let AI suggest what to cook based on your pantry staples and recent taste profile.</p>
+          <p className="text-sm text-orange-200/70 mt-1">Let Simmer suggest what to cook based on your pantry staples and recent taste profile.</p>
         </div>
         
         <div className="flex items-center gap-2 w-full md:w-auto">
