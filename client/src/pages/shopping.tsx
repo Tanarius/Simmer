@@ -153,13 +153,13 @@ function ItemRow({
               <Tooltip key={store.name}>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={() => window.open(store.buildUrl(searchTerm), "_blank")}
+                    onClick={() => window.open(store.buildUrl(searchTerm), "_blank", "noopener")}
                     className={cn("h-6 w-6 rounded-md flex items-center justify-center transition-opacity", store.bg, store.text)}
                   >
                     <store.Logo />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">{store.name}</TooltipContent>
+                <TooltipContent side="top" className="text-xs">Search on {store.name}</TooltipContent>
               </Tooltip>
             ))}
             <button onClick={() => onDelete(item.id)} className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors">
@@ -190,7 +190,7 @@ function ItemRow({
           {STORES.map(store => (
             <button
               key={store.name}
-              onClick={() => { window.open(store.buildUrl(searchTerm), "_blank"); setStoreOpen(false); }}
+              onClick={() => { window.open(store.buildUrl(searchTerm), "_blank", "noopener"); setStoreOpen(false); }}
               className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold flex-1 justify-center", store.bg, store.text)}
             >
               <store.Logo />
@@ -219,6 +219,7 @@ export default function ShoppingPage() {
   const [copilotLoading, setCopilotLoading] = useState(false);
   const [copilotError, setCopilotError] = useState("");
   const [hasSentCopilot, setHasSentCopilot] = useState(false);
+  const [copilotRemaining, setCopilotRemaining] = useState<number | null>(null);
   const [copilotSessionId] = useState(() => `shopping-${Date.now()}`);
   const copilotInputRef = useRef<HTMLInputElement>(null);
   const lastSyncedPlanRef = useRef<string | null>(null);
@@ -392,10 +393,12 @@ export default function ShoppingPage() {
     setCopilotLoading(true);
     setCopilotError("");
     try {
-      await apiRequest("POST", "/api/ai/copilot/chat", {
-        message,
+      const res = await apiRequest("POST", "/api/ai/copilot/chat", {
+        content: message,
         sessionId: copilotSessionId,
       });
+      const data = await res.json().catch(() => ({}));
+      if (typeof data?.callsRemaining === "number") setCopilotRemaining(data.callsRemaining);
       queryClient.invalidateQueries({ queryKey: ["/api/snacks/shopping"] });
       setCopilotInput("");
     } catch (err: any) {
@@ -573,7 +576,7 @@ export default function ShoppingPage() {
                 {STORES.map(store => (
                   <button
                     key={store.name}
-                    onClick={() => window.open(store.buildUrl(unchecked[0]?.name ?? "groceries"), "_blank")}
+                    onClick={() => window.open(store.buildUrl(unchecked[0]?.name ?? "groceries"), "_blank", "noopener")}
                     className={cn("flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold flex-1 justify-center", store.bg, store.text)}
                   >
                     <store.Logo />
@@ -613,6 +616,11 @@ export default function ShoppingPage() {
         )}
         {copilotError && (
           <p className="text-xs text-red-400 mb-1.5 px-1">{copilotError}</p>
+        )}
+        {copilotRemaining !== null && copilotRemaining < 9999 && (
+          <p className="text-[11px] text-muted-foreground mb-1.5 px-1 tabular-nums">
+            {copilotRemaining} {copilotRemaining === 1 ? "message" : "messages"} left today
+          </p>
         )}
         <div className="flex gap-2 items-center">
           <input
