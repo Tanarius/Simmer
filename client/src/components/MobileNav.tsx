@@ -1,7 +1,7 @@
 import { createPortal } from "react-dom";
-import { useState, useEffect } from "react";
 import { Home, ChefHat, Calendar, ShoppingCart, User } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const NAV_ITEMS = [
   { title: "Home",    href: "/",         Icon: Home },
@@ -13,52 +13,13 @@ const NAV_ITEMS = [
 
 export function MobileNav() {
   const [location] = useLocation();
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth < 1024 : true
-  );
-  const [dims, setDims] = useState(() =>
-    typeof window !== "undefined"
-      ? `${window.innerWidth}x${window.innerHeight}`
-      : "?"
-  );
+  // Gate on the SAME breakpoint as the sidebar (useIsMobile → 768px = Tailwind `md`).
+  // The desktop sidebar renders at ≥ 768 (`hidden md:block`); below 768 it collapses to a
+  // Sheet. Showing the bottom nav only when isMobile keeps exactly one of {sidebar, bottom
+  // nav} visible at every width — no overlap band, so it can't cover the usage counters.
+  const isMobile = useIsMobile();
 
-  useEffect(() => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    console.log("[MobileNav] mounted — width:", w, "height:", h, "isMobile:", w < 1024);
-    document.title = `Nav ${w}px`;
-
-    const check = () => {
-      setIsMobile(window.innerWidth < 1024);
-      setDims(`${window.innerWidth}x${window.innerHeight}`);
-    };
-    window.addEventListener("resize", check);
-    return () => {
-      window.removeEventListener("resize", check);
-      console.log("[MobileNav] unmounted");
-    };
-  }, []);
-
-  // DIAGNOSTIC: always-visible viewport badge so we can see mount + reported size
-  // Remove after confirming nav shows on device
-  const diagnosticBadge = (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        zIndex: 999999,
-        background: "red",
-        color: "white",
-        padding: "4px 8px",
-        fontSize: "12px",
-        fontFamily: "monospace",
-        pointerEvents: "none",
-      }}
-    >
-      {dims} {isMobile ? "📱" : "🖥️"}
-    </div>
-  );
+  if (!isMobile) return null;
 
   const nav = (
     <nav
@@ -126,12 +87,6 @@ export function MobileNav() {
     </nav>
   );
 
-  // Always render diagnostic badge; nav only when isMobile
-  return createPortal(
-    <>
-      {diagnosticBadge}
-      {isMobile && nav}
-    </>,
-    document.body
-  );
+  // Portal to body so the fixed bar isn't trapped by the app shell's overflow-hidden.
+  return createPortal(nav, document.body);
 }
