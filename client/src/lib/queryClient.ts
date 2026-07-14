@@ -2,10 +2,27 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
 
+/**
+ * Error thrown for non-2xx API responses. Carries the HTTP `status` (so callers can do
+ * `err?.status === 429`) and the raw response `body`. The message keeps the historical
+ * `"<status>: <body>"` shape so existing parsers (e.g. CopilotPanel reads the JSON body out
+ * of err.message) keep working.
+ */
+export class ApiError extends Error {
+  status: number;
+  body: string;
+  constructor(status: number, body: string) {
+    super(`${status}: ${body}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    throw new ApiError(res.status, text);
   }
 }
 
