@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { aiRateLimit, copilotRateLimit, FREE_TIER_DAILY_LIMIT, TEST_TIER_DAILY_LIMIT, COPILOT_FREE_TIER_DAILY_LIMIT, COPILOT_TEST_TIER_DAILY_LIMIT } from "../middleware/aiRateLimit";
+import { aiRateLimit, copilotRateLimit } from "../middleware/aiRateLimit";
 import {
   suggestRecipesFromPantry,
   selectWeeklyMeals,
@@ -15,18 +15,6 @@ import { aiCache, TTL_24H } from "../utils/cache";
 import { detectTags } from "../utils/autoTag";
 import { guessCuisine } from "../utils/categorization";
 
-function getAiCallsRemaining(tier: string, callsToday: number): number {
-  if (tier === 'premium') return 9999;
-  const limit = tier === 'test' ? TEST_TIER_DAILY_LIMIT : FREE_TIER_DAILY_LIMIT;
-  return Math.max(0, limit - callsToday);
-}
-
-function getCopilotCallsRemaining(tier: string, callsToday: number): number {
-  if (tier === 'premium') return 9999;
-  const limit = tier === 'test' ? COPILOT_TEST_TIER_DAILY_LIMIT : COPILOT_FREE_TIER_DAILY_LIMIT;
-  return Math.max(0, limit - callsToday);
-}
-
 const router = Router();
 
 // --- COPILOT ROUTES ---
@@ -36,12 +24,8 @@ router.post("/copilot/chat", copilotRateLimit, async (req, res, next) => {
     if (!sessionId || !content) return res.status(400).json({ error: "Missing sessionId or content" });
 
     const reply = await chatWithCopilot((req.user as any).id, (req.user as any).householdId, sessionId, content);
-    
-    // Usage remaining calculation
-    const usage = await storage.getUserAiUsage((req.user as any).id);
-    const callsRemaining = getCopilotCallsRemaining(usage.subscriptionTier, usage.copilotCallsToday);
 
-    res.json({ message: reply, callsRemaining });
+    res.json({ message: reply, callsRemaining: res.locals.copilotCallsRemaining });
   } catch (err) {
     next(err);
   }
@@ -210,9 +194,7 @@ router.post("/copilot/find-recipes", copilotRateLimit, async (req, res, next) =>
     }
 
     const foundRecipes = await searchRecipes(parsed, { number: 12 });
-    const usage = await storage.getUserAiUsage(userId);
-    const callsRemaining = getCopilotCallsRemaining(usage.subscriptionTier, usage.copilotCallsToday);
-    res.json({ recipes: foundRecipes, callsRemaining });
+    res.json({ recipes: foundRecipes, callsRemaining: res.locals.copilotCallsRemaining });
   } catch (err) {
     next(err);
   }
@@ -382,10 +364,7 @@ router.post("/suggest", async (req, res, next) => {
     const recipes = await suggestRecipesFromPantry(ingredientList, prefs);
     aiCache.set(cacheKey, { recipes }, TTL_24H);
 
-    const usage = await storage.getUserAiUsage((req.user as any).id);
-    const callsRemaining = getAiCallsRemaining(usage.subscriptionTier, usage.aiCallsToday);
-    
-    res.json({ recipes, callsRemaining });
+    res.json({ recipes, callsRemaining: res.locals.aiCallsRemaining });
   } catch (err) {
     next(err);
   }
@@ -434,10 +413,7 @@ router.post("/weekly-plan", async (req, res, next) => {
     const meals = await selectWeeklyMeals(recipeList, schedule, recentMealIds, cookingStyles);
     aiCache.set(cacheKey, { meals }, TTL_24H);
 
-    const usage = await storage.getUserAiUsage((req.user as any).id);
-    const callsRemaining = getAiCallsRemaining(usage.subscriptionTier, usage.aiCallsToday);
-
-    res.json({ meals, callsRemaining });
+    res.json({ meals, callsRemaining: res.locals.aiCallsRemaining });
   } catch (err) {
     next(err);
   }
@@ -450,10 +426,7 @@ router.post("/optimize-shopping-list", async (req, res, next) => {
     const pantryItems = staples.map(s => s.name);
 
     const optimizedList = await optimizeShoppingList(listItems || [], pantryItems);
-    const usage = await storage.getUserAiUsage((req.user as any).id);
-    const callsRemaining = getAiCallsRemaining(usage.subscriptionTier, usage.aiCallsToday);
-
-    res.json({ optimizedList, callsRemaining });
+    res.json({ optimizedList, callsRemaining: res.locals.aiCallsRemaining });
   } catch (err) {
     next(err);
   }

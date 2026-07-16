@@ -12,7 +12,7 @@ import type {
   UserPreference, UserTasteProfile as DbUserTasteProfile, CopilotSession, ActivityLogEntry,
   MealReaction, Household, SnackWishlistItem, ShoppingListItem
 } from "@shared/schema";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray, sql } from "drizzle-orm";
 
 const dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) {
@@ -297,31 +297,24 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  // Atomic increment (SQL `col + 1`) — never a read-then-write, so concurrent bursts can't
+  // lose updates. The reset-if-new-day helper runs first in the middleware, so the reset
+  // date is already today by the time we get here. Returns the new count.
   async incrementAiCalls(userId: number): Promise<{ newCount: number }> {
-    const user = await this.getUser(userId);
-    if (!user) throw new Error("User not found");
-    const today = new Date().toISOString().split('T')[0];
     const rows = await db.update(users)
-      .set({ 
-        aiCallsToday: user.aiCallsToday + 1,
-        aiCallsResetDate: user.aiCallsResetDate || today,
-      })
+      .set({ aiCallsToday: sql`${users.aiCallsToday} + 1` })
       .where(eq(users.id, userId))
       .returning();
+    if (!rows[0]) throw new Error("User not found");
     return { newCount: rows[0].aiCallsToday };
   }
 
   async incrementCopilotCalls(userId: number): Promise<{ newCount: number }> {
-    const user = await this.getUser(userId);
-    if (!user) throw new Error("User not found");
-    const today = new Date().toISOString().split('T')[0];
     const rows = await db.update(users)
-      .set({ 
-        copilotCallsToday: user.copilotCallsToday + 1,
-        copilotResetDate: user.copilotResetDate || today,
-      })
+      .set({ copilotCallsToday: sql`${users.copilotCallsToday} + 1` })
       .where(eq(users.id, userId))
       .returning();
+    if (!rows[0]) throw new Error("User not found");
     return { newCount: rows[0].copilotCallsToday };
   }
 
